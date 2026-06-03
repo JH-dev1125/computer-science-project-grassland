@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Optional
+
 from grassland.entities.animals.omnivores.omnivore import Omnivore
+from grassland.entities.base import Entity
 from grassland.geometry import Vec2
+
+if TYPE_CHECKING:
+    from grassland.world import World
 
 
 class Meerkat(Omnivore):
@@ -27,11 +33,13 @@ class Meerkat(Omnivore):
         self.stop()
         self.action_text = "stand"
 
-    def eat_grass(self, grass: object) -> None:
+    def eat_grass(self, grass: "Entity") -> None:
         self.eat(grass)
 
-    def behave(self, world: object, dt: float) -> bool:
-        threat = world.nearest_predator(self, self.detect_range * (1.25 if self.is_sentinel else 1.0))
+    def behave(self, world: "World", dt: float) -> bool:
+        threat = world.nearest_predator(
+            self, self.detect_range * (1.25 if self.is_sentinel else 1.0)
+        )
         if threat is not None:
             cave = world.nearest_terrain_type("Cave", self.position)
             if cave is not None:
@@ -55,7 +63,7 @@ class Meerkat(Omnivore):
         self.sentinel_height = 0.0
         return super().behave(world, dt)
 
-    def decide_food(self, world: object) -> object | None:
+    def decide_food(self, world: "World") -> Optional["Entity"]:
         grass = world.nearest_alive(
             world.plants,
             self.position,

@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from grassland.world import World
+    from grassland.entities.base import Entity
+
 from grassland.entities.animals.omnivores.omnivore import Omnivore
 from grassland.geometry import Vec2
 
@@ -21,12 +27,12 @@ class Warthog(Omnivore):
         self.tusk_power = 20.0
         self.burrow_location: Vec2 | None = None
 
-    def dig(self, world: object) -> object | None:
+    def dig(self, world: "World") -> Optional["Entity"]:
         food = world.nearest_plant(self.position)
         self.action_text = "dig"
         return food
 
-    def burrow(self, world: object) -> None:
+    def burrow(self, world: "World") -> None:
         cave = world.nearest_terrain_type("Cave", self.position)
         if cave is not None:
             self.burrow_location = cave.position.copy()
@@ -42,10 +48,13 @@ class Warthog(Omnivore):
         self.stop()
         self.action_text = "burrow"
 
-    def behave(self, world: object, dt: float) -> bool:
+    def behave(self, world: "World", dt: float) -> bool:
         threat = world.nearest_predator(self, self.detect_range)
         if threat is not None:
-            if self.position.distance_to(threat.position) < 48.0 and self.stamina > 18.0:
+            if (
+                self.position.distance_to(threat.position) < 48.0
+                and self.stamina > 18.0
+            ):
                 old_power = self.power
                 self.power = self.tusk_power
                 self.attack(threat, world)
@@ -63,7 +72,10 @@ class Warthog(Omnivore):
         if self.hunger > 52.0:
             food = self.dig(world)
             if food is not None:
-                if self.position.distance_to(food.position) <= self.radius + food.radius + 8:
+                if (
+                    self.position.distance_to(food.position)
+                    <= self.radius + food.radius + 8
+                ):
                     self.eat(food)
                     self.stop()
                 else:

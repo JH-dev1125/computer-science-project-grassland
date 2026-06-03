@@ -323,6 +323,27 @@ class World:
 
         return self.nearest_alive(self.animals, position, has_name, max_distance)
 
+    def nearest_same_species(self, animal, radius):
+        # 자기 자신을 제외하고 같은 이름(같은 종)의 가장 가까운 동물을 반환
+        def is_same_species(item):
+            return item is not animal and getattr(item, "name", "") == animal.name
+
+        return self.nearest_alive(self.animals, animal.position, is_same_species, radius)
+
+    def spawn_offspring(self, parent):
+        # 부모와 같은 클래스의 자손을 부모 근처에 생성하고 animals 목록에 추가
+        # 각 동물 서브클래스(Gazelle, Zebra 등)는 position 하나만 받는 생성자를 가짐
+        offset = Vec2(random.uniform(-30, 30), random.uniform(-30, 30))
+        new_position = Vec2(
+            max(0.0, min(float(self.width), parent.position.x + offset.x)),
+            max(0.0, min(float(self.height), parent.position.y + offset.y)),
+        )
+        try:
+            offspring = type(parent)(new_position)
+            self.animals.append(offspring)
+        except Exception:
+            pass
+
     def nearest_terrain_type(self, terrain_name, position):
         def has_terrain_name(item):
             return item.name == terrain_name

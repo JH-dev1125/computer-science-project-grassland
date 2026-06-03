@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from grassland.entities.base import Entity
 from grassland.entities.plants.plant import Plant
 from grassland.geometry import Vec2
 
@@ -24,6 +25,6 @@ class BaobabTree(Plant):
         self.stored_water = 80.0  # 가뭄 시 동물에게 제공 가능한 수분
         self.radius = 42
 
-    def provide_shade(self, animal: object) -> None:
+    def provide_shade(self, animal: Entity) -> None:
         """동물에게 그늘을 제공해 스트레스를 감소."""
-        animal.stress = max(0.0, animal.stress - 2.0)
+        animal.stress = max(0.0, animal.stress - 2.0)  # type: ignore[attr-defined]

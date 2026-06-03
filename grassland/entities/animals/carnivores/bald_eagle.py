@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from grassland.world import World
 from grassland.entities.animals.carnivores.carnivore import Carnivore
 from grassland.geometry import Vec2
 
@@ -14,7 +18,7 @@ class BaldEagle(Carnivore):
         self.is_flying = True
         self.action_text = "fly"
 
-    def behave(self, world: object, dt: float) -> bool:
+    def behave(self, world: "World", dt: float) -> bool:
         lion = world.nearest_named("Lion", self.position, 90.0)
         if lion is not None:
             self.fly()

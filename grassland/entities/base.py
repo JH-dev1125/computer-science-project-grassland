@@ -6,6 +6,10 @@ from typing import Tuple
 
 from grassland.geometry import Vec2
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from grassland.world import World
 
 Color = Tuple[int, int, int]
 _ENTITY_IDS = count(1)
@@ -25,7 +29,7 @@ class Entity:
     kind: str = "entity"
     id: int = field(default_factory=lambda: next(_ENTITY_IDS), init=False)
 
-    def update(self, world: object, dt: float) -> None:
+    def update(self, world: "World", dt: float) -> None:
         return None
 
     def distance_to(self, other: "Entity") -> float:
@@ -46,4 +50,3 @@ class Entity:
     def status(self) -> str:
         state = "alive" if self.alive else "dead"
         return f"{self.name}: {state} at ({self.position.x:.0f}, {self.position.y:.0f})"
-

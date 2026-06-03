@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from grassland.entities.base import Entity
 from grassland.entities.plants.plant import Plant
 from grassland.geometry import Vec2
 
@@ -30,15 +31,15 @@ class Bush(Plant):
 
     # ── 메서드 ────────────────────────────────────────────────────────────────
 
-    def hide_entity(self, entity: object) -> None:
+    def hide_entity(self, entity: Entity) -> None:
         """
         개체를 덤불 안에 숨김 (오버로딩: stealth_factor에 현재 잎 비율을 반영).
         잎이 많을수록 은신 효과가 높고, 잎이 줄면 효과도 감소.
         """
         foliage_ratio = self.current_foliage / self.max_foliage
         effective_stealth = self.stealth_factor * foliage_ratio
-        entity.is_hidden = True
-        entity.stress = max(0.0, entity.stress - effective_stealth)
+        entity.is_hidden = True  # type: ignore[attr-defined]
+        entity.stress = max(0.0, entity.stress - effective_stealth)  # type: ignore[attr-defined]
         entity.action_text = "hiding"
 
     def consume(self, amount: float) -> float:

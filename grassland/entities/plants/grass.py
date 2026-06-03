@@ -1,5 +1,8 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from grassland.world import World
 from grassland.entities.plants.plant import Plant
 from grassland.geometry import Vec2
 
@@ -24,7 +27,7 @@ class Grass(Plant):
         self.growth_rate = 2.2  # 비 날씨 시 초당 추가 회복량
         self.radius = 16
 
-    def update(self, world: object, dt: float) -> None:
+    def update(self, world: "World", dt: float) -> None:
         if not self.alive:
             return
         super().update(world, dt)  # 기본 광합성
