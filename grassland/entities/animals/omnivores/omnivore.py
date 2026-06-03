@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import random
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from grassland.world import World
+    from grassland.entities.protocols import Consumable
 
 from grassland.entities.animals.animal import Animal
-from grassland.entities.base import Entity
+from grassland.entities.plants.plant import Plant
+from grassland.entities.resources.carcass import Carcass
 from grassland.geometry import Vec2
 
 
@@ -60,10 +62,7 @@ class Omnivore(Animal):
         if self.hunger > 58.0:
             food = self.decide_food(world)
             if food is not None:
-                if (
-                    self.position.distance_to(food.position)
-                    <= self.radius + food.radius + 8
-                ):
+                if self.position.distance_to(food.position) <= self.radius + food.radius + 8:
                     self.eat(food)
                     self.stop()
                 else:
@@ -72,10 +71,15 @@ class Omnivore(Animal):
                 return True
         return False
 
-    def forage(self, world: "World") -> Optional["Entity"]:
-        return self.decide_food(world)
+    def eat(self, food: "Consumable") -> None:
+        if isinstance(food, Carcass):
+            food.reduce_hunger(self)
+            food.being_eaten_by = self
+            self.action_text = "eat_carcass"
+        else:
+            super().eat(food)
 
-    def decide_food(self, world: "World") -> Optional["Entity"]:
+    def decide_food(self, world: "World") -> Optional[Carcass | Plant]:
         carcass = world.nearest_carcass(self.position)
         plant = world.nearest_plant(self.position)
 
@@ -84,30 +88,13 @@ class Omnivore(Animal):
         if plant is None:
             return carcass
 
-        wants_meat = random.random() < self.diet_preference
-        if wants_meat:
-            return carcass
-        return plant
+        return carcass if random.random() < self.diet_preference else plant
 
-    def eat(self, food: "Entity") -> None:
-        if getattr(food, "name", "") == "Carcass":
-            carcass: Any = food
-            if hasattr(food, "reduce_hunger"):
-                carcass.reduce_hunger(self)
-            elif hasattr(food, "consume"):
-                eaten = carcass.consume(18)
-                self.hunger = max(0.0, self.hunger - eaten)
-            if hasattr(food, "being_eaten_by"):
-                carcass.being_eaten_by = self
-            self.action_text = "eat_carcass"
-        else:
-            super().eat(food)
+    def forage(self, world: "World") -> Optional[Carcass | Plant]:
+        return self.decide_food(world)
 
     def flee_or_fight(self, threat: Animal, world: "World", dt: float) -> None:
-        if (
-            random.random() < self.aggression
-            and self.position.distance_to(threat.position) < 42
-        ):
+        if random.random() < self.aggression and self.position.distance_to(threat.position) < 42:
             self.attack(threat, world)
         else:
             self.move_away_from(threat.position, self.speed * 1.15)

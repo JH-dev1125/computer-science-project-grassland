@@ -1,11 +1,12 @@
 from __future__ import annotations
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from grassland.world import World
-    from grassland.entities.base import Entity
+    from grassland.entities.protocols import Consumable
 
 from grassland.entities.animals.animal import Animal
+from grassland.entities.resources.carcass import Carcass
 from grassland.geometry import Vec2
 
 
@@ -61,16 +62,10 @@ class Carnivore(Animal):
                 return True
         return False
 
-    def eat(self, food: "Entity") -> None:
-        if getattr(food, "name", "") == "Carcass":
-            carcass: Any = food
-            if hasattr(food, "reduce_hunger"):
-                carcass.reduce_hunger(self)
-            elif hasattr(food, "consume"):
-                eaten = carcass.consume(22)
-                self.hunger = max(0.0, self.hunger - eaten)
-            if hasattr(food, "being_eaten_by"):
-                carcass.being_eaten_by = self
+    def eat(self, food: "Consumable") -> None:
+        if isinstance(food, Carcass):
+            food.reduce_hunger(self)
+            food.being_eaten_by = self
             self.action_text = "eat_carcass"
         else:
             super().eat(food)

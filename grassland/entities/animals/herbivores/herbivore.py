@@ -149,21 +149,16 @@ class Herbivore(Animal):
         #   5. 실패해도 15초 쿨다운 부여 (같은 파트너와 매 프레임 시도하는 것 방지)
         # hasattr 가드: world 타입이 object로 선언되어 있어 IDE가 메서드를 못 찾는 문제 방지
         # world.py에 nearest_same_species / spawn_offspring 이 실제로 추가되어 있음
-        if not hasattr(world, "nearest_same_species") or not hasattr(
-            world, "spawn_offspring"
-        ):
-            return False
         partner = world.nearest_same_species(self, radius=80.0)
         if partner is None:
             return False
-        if not getattr(partner, "alive", False):
+        if not partner.alive:
             return False
-        # 파트너도 쿨다운 중이면 건너뜀
-        if getattr(partner, "reproduce_cooldown", 1.0) > 0:
+        if not isinstance(partner, Herbivore) or partner.reproduce_cooldown > 0:
             return False
         if self.couple(self, partner):
-            world.spawn_offspring(self)  # 자손 생성
-            self.reproduce_cooldown = 30.0  # 30초 후 재번식 가능
+            world.spawn_offspring(self)
+            self.reproduce_cooldown = 30.0
             partner.reproduce_cooldown = 30.0
             self.action_text = "reproduce"
         else:

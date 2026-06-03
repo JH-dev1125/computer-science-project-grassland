@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from grassland.entities.base import Entity
 from grassland.entities.terrain.terrain_base import Terrain
 from grassland.geometry import Vec2
+
+if TYPE_CHECKING:
+    from grassland.entities.animals.animal import Animal
 
 
 class LakeSide(Terrain):
@@ -11,3 +16,6 @@ class LakeSide(Terrain):
 
     def give_effect(self, entity: Entity) -> None:
         entity.thirst = max(0.0, entity.thirst - 18.0)  # type: ignore[attr-defined]
+
+    def reduce_thirst(self, animal: "Animal") -> None:
+        animal.thirst = max(0.0, animal.thirst - 18.0)

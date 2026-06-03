@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from dataclasses import dataclass, field
 from itertools import count
 from typing import Tuple
@@ -16,7 +17,7 @@ _ENTITY_IDS = count(1)
 
 
 @dataclass
-class Entity:
+class Entity(ABC):
     name: str
     position: Vec2
     radius: float

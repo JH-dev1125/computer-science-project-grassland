@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import random
-from typing import Any, Optional, TYPE_CHECKING
+from abc import abstractmethod
+from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from grassland.world import World
+    from grassland.entities.protocols import Consumable, Drinkable
 
 from grassland.entities.base import Entity
 from grassland.geometry import Vec2, random_unit_vector
@@ -38,6 +40,7 @@ class Animal(Entity):
         self.is_hidden = False
         self.age = 0.0
         self.kind = "animal"
+        self.diet_type: str = ""  # 서브클래스에서 "herbivore" / "carnivore" / "omnivore" 로 설정
         self.decision_timer = random.uniform(0.2, 1.4)
         self._carcass_spawned = False
 
@@ -46,19 +49,13 @@ class Animal(Entity):
             direction.normalized() * self.speed
         )  # normalized -> 물리에서 정규화랑 똑같)
 
-    def eat(self, food: "Entity") -> None:
-        if hasattr(food, "consume"):
-            f: Any = food
-            eaten = f.consume(14)
-            self.hunger = max(0.0, self.hunger - eaten)  # hunger 최솟값 0으로 고정
-            self.action_text = "eat"
+    def eat(self, food: "Consumable") -> None:
+        eaten = food.consume(14)
+        self.hunger = max(0.0, self.hunger - eaten)
+        self.action_text = "eat"
 
-    def drink(self, source: "Entity") -> None:  # drink 가능한 개체들에 대해 drink 시행
-        s: Any = source
-        if hasattr(source, "reduce_thirst"):
-            s.reduce_thirst(self)
-        elif hasattr(source, "enable_drinking"):
-            s.enable_drinking(self)
+    def drink(self, source: "Drinkable") -> None:
+        source.reduce_thirst(self)
 
     def sleep(
         self,
@@ -82,22 +79,18 @@ class Animal(Entity):
             self._carcass_spawned = True
             world.spawn_carcass(self)  # 죽으면 carcass(시체 생성)
 
-    def attack(self, target: "Entity", world: "World") -> None:
-        t: Any = target
-        if not getattr(target, "alive", False):
+    def attack(self, target: "Animal", world: "World") -> None:
+        if not target.alive:
             return
-        t.health -= self.power
-        t.stress = min(
-            100.0, t.stress + 8.0
-        )  # stress는 최대 100, 공격 받으면 8증가 (이거 대충 정해놓은거고 시뮬레이션 돌리고 최적값 찾기)
+        target.health -= self.power
+        target.stress = min(100.0, target.stress + 8.0)
         self.action_text = "attack"
-        if t.health <= 0:
-            t.die(world)
+        if target.health <= 0:
+            target.die(world)
 
-    def couple(self, one: object, other: object) -> bool:
-        if getattr(one, "alive", False) and getattr(other, "alive", False):
-            a = random.uniform(0, 1)
-            return bool(round(a))  # (번식 성공 확률 1/2)
+    def couple(self, one: "Animal", other: "Animal") -> bool:
+        if one.alive and other.alive:
+            return bool(round(random.uniform(0, 1)))
         return False
 
     def recover_stamina(self, dt: float) -> None:
@@ -151,3 +144,8 @@ class Animal(Entity):
             self.speed * 0.18, self.speed * 0.45
         )
         self.action_text = "move"
+
+    @abstractmethod
+    def behave(self, world: "World", dt: float) -> bool:
+        """매 틱 동물의 의사결정 로직. 행동을 취했으면 True, 아무것도 안 했으면 False."""
+        ...

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING
 
+from grassland.entities.animals.omnivores.omnivore import Omnivore
+from grassland.entities.plants.plant import Plant
+from grassland.geometry import Vec2
+
 if TYPE_CHECKING:
     from grassland.world import World
-    from grassland.entities.base import Entity
-
-from grassland.entities.animals.omnivores.omnivore import Omnivore
-from grassland.geometry import Vec2
 
 
 class Warthog(Omnivore):
@@ -27,7 +27,7 @@ class Warthog(Omnivore):
         self.tusk_power = 20.0
         self.burrow_location: Vec2 | None = None
 
-    def dig(self, world: "World") -> Optional["Entity"]:
+    def dig(self, world: "World") -> Optional[Plant]:
         food = world.nearest_plant(self.position)
         self.action_text = "dig"
         return food
@@ -51,10 +51,7 @@ class Warthog(Omnivore):
     def behave(self, world: "World", dt: float) -> bool:
         threat = world.nearest_predator(self, self.detect_range)
         if threat is not None:
-            if (
-                self.position.distance_to(threat.position) < 48.0
-                and self.stamina > 18.0
-            ):
+            if self.position.distance_to(threat.position) < 48.0 and self.stamina > 18.0:
                 old_power = self.power
                 self.power = self.tusk_power
                 self.attack(threat, world)
@@ -72,10 +69,7 @@ class Warthog(Omnivore):
         if self.hunger > 52.0:
             food = self.dig(world)
             if food is not None:
-                if (
-                    self.position.distance_to(food.position)
-                    <= self.radius + food.radius + 8
-                ):
+                if self.position.distance_to(food.position) <= self.radius + food.radius + 8:
                     self.eat(food)
                     self.stop()
                 else:

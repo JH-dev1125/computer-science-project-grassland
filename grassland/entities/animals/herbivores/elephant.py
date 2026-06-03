@@ -1,10 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+
+from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from grassland.world import World
-    from grassland.entities.base import Entity
 
+from grassland.entities.animals.animal import Animal
 from grassland.entities.animals.herbivores.herbivore import Herbivore
 from grassland.geometry import Vec2
 
@@ -16,7 +17,9 @@ class Elephant(Herbivore):
         )
         self.radius = 28.0
 
-    def fight_or_flight(self, threat: "Entity", world: "World", dt: float) -> None:
+    def fight_or_flight(
+        self, threat: Animal, world: Optional["World"], dt: float
+    ) -> None:
         if self.position.distance_to(threat.position) < 70.0:
             self.stomp(threat, world)
         else:
@@ -24,6 +27,7 @@ class Elephant(Herbivore):
             self.action_text = "guard"
         self.lose_energy(7.0 * dt)
 
-    def stomp(self, target: "Entity", world: "World") -> None:
-        self.attack(target, world)
+    def stomp(self, target: Animal, world: Optional["World"]) -> None:
+        if world is not None:
+            self.attack(target, world)
         self.action_text = "stomp"

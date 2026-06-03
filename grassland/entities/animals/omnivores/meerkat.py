@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import Optional, TYPE_CHECKING
 
 from grassland.entities.animals.omnivores.omnivore import Omnivore
-from grassland.entities.base import Entity
+from grassland.entities.plants.grass import Grass
+from grassland.entities.plants.plant import Plant
+from grassland.entities.resources.carcass import Carcass
 from grassland.geometry import Vec2
 
 if TYPE_CHECKING:
     from grassland.world import World
+    from grassland.entities.protocols import Consumable
 
 
 class Meerkat(Omnivore):
@@ -33,7 +36,7 @@ class Meerkat(Omnivore):
         self.stop()
         self.action_text = "stand"
 
-    def eat_grass(self, grass: "Entity") -> None:
+    def eat_grass(self, grass: "Consumable") -> None:
         self.eat(grass)
 
     def behave(self, world: "World", dt: float) -> bool:
@@ -63,11 +66,11 @@ class Meerkat(Omnivore):
         self.sentinel_height = 0.0
         return super().behave(world, dt)
 
-    def decide_food(self, world: "World") -> Optional["Entity"]:
+    def decide_food(self, world: "World") -> Optional[Carcass | Plant]:
         grass = world.nearest_alive(
             world.plants,
             self.position,
-            lambda plant: getattr(plant, "name", "") == "Grass",
+            lambda p: isinstance(p, Grass),
             self.forage_range,
         )
         if grass is not None:

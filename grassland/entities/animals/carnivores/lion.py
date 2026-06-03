@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from grassland.entities.animals.carnivores.carnivore import Carnivore
-from grassland.geometry import Vec2
 from typing import TYPE_CHECKING
+
+from grassland.entities.animals.carnivores.carnivore import Carnivore
+from grassland.entities.animals.herbivores.herbivore import Herbivore
+from grassland.geometry import Vec2
 
 if TYPE_CHECKING:
     from grassland.world import World
-    from grassland.entities.base import Entity
 
 
 class Lion(Carnivore):
@@ -17,12 +18,13 @@ class Lion(Carnivore):
     def roar(self, world: "World") -> None:
         for animal in world.living_animals():
             if (
-                getattr(animal, "name", "") == "Zebra"
+                animal.name == "Zebra"
+                and isinstance(animal, Herbivore)
                 and self.position.distance_to(animal.position) <= 180.0
             ):
                 animal.panic_boost_timer = 5.0
         self.action_text = "roar"
 
-    def yacha(self, target: "Entity", world: "World") -> None:
+    def yacha(self, target: "Carnivore | Herbivore", world: "World") -> None:
         self.attack(target, world)
         self.action_text = "yacha"
