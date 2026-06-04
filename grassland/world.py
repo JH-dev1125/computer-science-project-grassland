@@ -216,6 +216,10 @@ class World:
     def nearest_plant(self, position):
         return self._nearest(self.plants, position)
 
+    def nearest_bush(self, position, max_distance):
+        return self._nearest(self.plants, position,
+                             lambda p: isinstance(p, Bush), max_distance)
+
     def nearest_carcass(self, position):
         return self._nearest(self.carcasses(), position,
                              lambda c: c.carried_by is None)

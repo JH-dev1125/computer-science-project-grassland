@@ -1,16 +1,62 @@
-# acacia_tree.py — 아카시아 (계획서 Acacia_Tree, Plant 상속)
-# thorn_damage, leaf_amount, max_leaf / produce_leaves()
+# ────────────────────────────────────────────────────────────
+#  [이후 코드 — 현재 파일]
+# ────────────────────────────────────────────────────────────
+# 데이터 흐름:
+#   Animal.eat(acacia)
+#     → acacia.consume(14)       : health 감소 + leaf_amount -= eaten*0.6
+#     → acacia.on_eaten_by(animal): leaf>5이면 animal.health -= 4.0
+# ────────────────────────────────────────────────────────────
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from grassland.entities.plants.plant import Plant
+from grassland.geometry import Vec2
+
+if TYPE_CHECKING:
+    from grassland.world import World
+    from grassland.entities.animals.animal import Animal
 
 
 class AcaciaTree(Plant):
-    def __init__(self, position):
-        super().__init__("Acacia_Tree", position, health=130.0, max_health=130.0,
-                         color=(97, 142, 63), photosynthesis=1.0, radius=34)
-        self.thorn_damage = 4.0   # 섭취하는 동물에게 주는 가시 피해
+    def __init__(self, position: Vec2):
+        super().__init__(
+            name="Acacia_Tree",
+            position=position,
+            health=130.0,
+            max_health=150.0,
+            color=(97, 142, 63),
+            photosynthesis=0.4,
+        )
+        self.thorn_damage = 4.0
         self.leaf_amount = 90.0
         self.max_leaf = 100.0
+        self.radius = 34
+        self._leaf_timer = 0.0  # 추가: 잎 재생 타이머
 
-    def produce_leaves(self):
-        self.leaf_amount = min(self.max_leaf, self.leaf_amount + 8)
-        self.health = min(self.max_health, self.health + 5)
+    def update(self, world: "World", dt: float) -> None:
+        super().update(world, dt)
+        if not self.alive:
+            return
+        self._leaf_timer += dt
+        if self._leaf_timer >= 8.0:  # 8초마다 잎 재생
+            self.produce_leaves()
+            self._leaf_timer = 0.0
+
+    def consume(self, amount: float) -> float:
+        """잎도 같이 소모된다."""
+        eaten = super().consume(amount)
+        self.leaf_amount = max(0.0, self.leaf_amount - eaten * 0.6)
+        return eaten
+
+    def on_eaten_by(self, animal: "Animal") -> None:
+        """잎이 남아 있을 때만 가시 피해를 입힌다."""
+        if self.leaf_amount > 5.0:
+            animal.health = max(0.0, animal.health - self.thorn_damage)
+            animal.action_text = "thorned"
+
+    def produce_leaves(self) -> None:
+        """잎을 재생산하고 체력을 소량 회복."""
+        self.leaf_amount = min(self.max_leaf, self.leaf_amount + 8.0)
+        self.health = min(self.max_health, self.health + 5.0)

@@ -1,30 +1,39 @@
-# =============================================================================
-# elephant.py — 코끼리 (계획서 Elephant, Herbivore 상속)
-# 고유 속성: size_factor(클수록 접근 어려움), intimidation(포기 확률 영향)
-# Fight=stomp()(포식자를 쫓아냄), Flight 거의 안 함
-# =============================================================================
+# ────────────────────────────────────────────────────────────
+#  [이후 코드 — 현재 파일]
+# ────────────────────────────────────────────────────────────
+# 핵심 변경:
+#   fight  = stomp() — 돌진(move_toward)+공격으로 포식자 쫓아냄
+#   flight = 없음 (코끼리는 도망치지 않음)
+# ────────────────────────────────────────────────────────────
+
+from __future__ import annotations
+
+from typing import Optional, TYPE_CHECKING
+
+from grassland.entities.animals.animal import Animal
 from grassland.entities.animals.herbivores.herbivore import Herbivore
+from grassland.geometry import Vec2
+
+if TYPE_CHECKING:
+    from grassland.world import World
 
 
 class Elephant(Herbivore):
-    def __init__(self, position):
-        super().__init__("Elephant", position, (132, 132, 123),
-                         health=165.0, speed=52.0, power=28.0, detect_range=220.0)
-        self.radius = 28.0          # 큰 몸집 → 충돌·접근에 자동 반영
-        self.size_factor = 1.8
-        self.intimidation = 0.7
+    def __init__(self, position: Vec2):
+        super().__init__(
+            "Elephant", position, (132, 132, 123), 165.0, 52.0, 28.0, 220.0
+        )
+        self.radius = 28.0
 
-    def fight_or_flight(self, threat, world, dt):
-        if self.distance_to(threat) < 70.0 * self.size_factor:
+    def fight_or_flight(
+        self, threat: Animal, world: Optional["World"], dt: float
+    ) -> None:
+        del dt  # 코끼리는 항상 돌진 — dt 불필요
+        if world is not None:
             self.stomp(threat, world)
-        else:
-            self.move_away_from(threat.position, self.flee_speed * 0.7)
-            self.action_text = "flee"
 
-    def stomp(self, threat, world):
-        """짓밟기: 약간의 피해와 함께 포식자를 멀리 쫓아낸다(죽이기보다 격퇴)."""
-        old_power, self.power = self.power, self.power * 0.4
-        self.attack(threat, world)
-        self.power = old_power
-        threat.move_away_from(self.position, threat.speed * 1.6)
+    def stomp(self, target: Animal, world: "World") -> None:
+        """포식자를 향해 돌진하며 공격해 쫓아낸다."""
+        self.move_toward(target.position, self.speed * 1.2)
+        self.attack(target, world)
         self.action_text = "stomp"
