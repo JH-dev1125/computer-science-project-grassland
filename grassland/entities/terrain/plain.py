@@ -1,9 +1,7 @@
-from __future__ import annotations
-
+# plain.py — 평원 (계획서 Plain, Terrain 상속) : 배경 역할(효과 없음)
 from grassland.entities.terrain.terrain_base import Terrain
-from grassland.geometry import Vec2
 
 
 class Plain(Terrain):
-    def __init__(self, position: Vec2, size: float = 1000.0):
-        super().__init__(name="Plain", position=position, size=size, color=(126, 184, 92))
+    def __init__(self, position, size=1000.0):
+        super().__init__("Plain", position, size, color=(126, 184, 92))

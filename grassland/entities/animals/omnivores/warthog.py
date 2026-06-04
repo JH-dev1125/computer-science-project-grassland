@@ -1,38 +1,27 @@
-from __future__ import annotations
-
-from typing import Optional, TYPE_CHECKING
-
+# =============================================================================
+# warthog.py — 혹멧돼지 (계획서 Warthog, Omnivore 상속)
+# 고유 속성: tusk_power(엄니 위력), burrow_location(도주할 굴 위치)
+# 고유 메서드: dig()(땅 파 먹이 찾기), burrow()(굴로 도주), Yacha()(굴 근처면 맞섬)
+# =============================================================================
 from grassland.entities.animals.omnivores.omnivore import Omnivore
-from grassland.entities.plants.plant import Plant
-from grassland.geometry import Vec2
-
-if TYPE_CHECKING:
-    from grassland.world import World
 
 
 class Warthog(Omnivore):
-    def __init__(self, position: Vec2):
-        super().__init__(
-            name="Warthog",
-            position=position,
-            color=(121, 95, 70),
-            health=72.0,
-            speed=68.0,
-            power=12.0,
-            detect_range=165.0,
-            radius=18.0,
-        )
+    def __init__(self, position):
+        super().__init__("Warthog", position, (121, 95, 70),
+                         health=72.0, speed=68.0, power=12.0,
+                         detect_range=165.0, radius=18.0)
         self.diet_preference = 0.35
         self.aggression = 0.35
         self.tusk_power = 20.0
-        self.burrow_location: Vec2 | None = None
+        self.burrow_location = None
 
-    def dig(self, world: "World") -> Optional[Plant]:
-        food = world.nearest_plant(self.position)
+    def dig(self, world):
         self.action_text = "dig"
-        return food
+        return world.nearest_plant(self.position)
 
-    def burrow(self, world: "World") -> None:
+    def burrow(self, world):
+        """가까운 동굴로 도주해 숨는다. 없으면 그 자리에 굴을 판다."""
         cave = world.nearest_terrain_type("Cave", self.position)
         if cave is not None:
             self.burrow_location = cave.position.copy()
@@ -40,40 +29,40 @@ class Warthog(Omnivore):
             if cave.contains(self):
                 self.is_hidden = True
                 self.stop()
-            self.action_text = "burrow"
-            return
-
-        self.burrow_location = self.position.copy()
-        self.is_hidden = True
-        self.stop()
+        else:
+            self.burrow_location = self.position.copy()
+            self.is_hidden = True
+            self.stop()
         self.action_text = "burrow"
 
-    def behave(self, world: "World", dt: float) -> bool:
+    def yacha(self, threat, world):
+        """굴이 근처에 있으면 엄니로 포식자에 맞선다(계획서 Yacha)."""
+        old_power, self.power = self.power, self.tusk_power
+        self.attack(threat, world)
+        self.power = old_power
+        self.action_text = "yacha"
+
+    def behave(self, world, dt):
         threat = world.nearest_predator(self, self.detect_range)
         if threat is not None:
-            if self.position.distance_to(threat.position) < 48.0 and self.stamina > 18.0:
-                old_power = self.power
-                self.power = self.tusk_power
-                self.attack(threat, world)
-                self.power = old_power
+            cave = world.nearest_terrain_type("Cave", self.position)
+            near_cave = cave is not None and self.distance_to(cave) < 160.0
+            if near_cave and self.distance_to(threat) < 48.0 and self.stamina > 18.0:
+                self.yacha(threat, world)           # 굴 근처 → 맞섬
                 self.lose_energy(10.0 * dt)
-                self.action_text = "tusk"
             else:
-                self.burrow(world)
+                self.burrow(world)                  # 아니면 굴로 도주
                 self.lose_energy(6.0 * dt)
             return True
-
         if self.seek_water_if_needed(world):
             return True
-
         if self.hunger > 52.0:
             food = self.dig(world)
             if food is not None:
-                if self.position.distance_to(food.position) <= self.radius + food.radius + 8:
+                if self.distance_to(food) <= self.radius + food.radius + 8:
                     self.eat(food)
                     self.stop()
                 else:
-                    self.move_toward(food.position, self.speed * 0.72)
+                    self.move_toward(food.position, self.speed * 0.75)
                 return True
-
         return False

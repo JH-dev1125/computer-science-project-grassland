@@ -1,26 +1,27 @@
-from __future__ import annotations
-
-from typing import Optional, TYPE_CHECKING
-
+# carcass.py — 사체 (계획서 Carcass, Resource 상속)
+# decomposition_timer / reduce_hunger()
+# being_eaten_by: 현재 먹는 포식자(하이에나 탈취·사자 포효 상호작용에 사용)
 from grassland.entities.resources.resource import Resource
-from grassland.geometry import Vec2
-
-if TYPE_CHECKING:
-    from grassland.entities.animals.animal import Animal
 
 
 class Carcass(Resource):
-    def __init__(self, position: Vec2, amount: float = 85.0):
-        super().__init__(
-            name="Carcass",
-            position=position,
-            amount=amount,
-            color=(118, 72, 44),
-        )
-        self.radius = 20
-        self.carried_by: Optional["Animal"] = None
-        self.being_eaten_by: Optional["Animal"] = None
+    def __init__(self, position, amount=85.0):
+        super().__init__("Carcass", position, amount,
+                         color=(118, 72, 44), radius=20)
+        self.decomposition_timer = 30.0   # 분해 시작까지 남은 시간(초)
+        self.carried_by = None
+        self.being_eaten_by = None
 
-    def reduce_hunger(self, animal: "Animal") -> None:
+    def update(self, world, dt):
+        """시간이 지나면 서서히 분해되어 사라진다."""
+        if not self.alive:
+            return
+        self.decomposition_timer -= dt
+        if self.decomposition_timer <= 0:
+            self.amount = max(0.0, self.amount - 6.0 * dt)
+            if self.amount <= 0:
+                self.delete()
+
+    def reduce_hunger(self, animal):
         taken = self.consume(22)
         animal.hunger = max(0.0, animal.hunger - taken)

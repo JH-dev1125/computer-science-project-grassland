@@ -1,27 +1,19 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
+# water_puddle.py — 물웅덩이 (계획서 Water_Puddle, Resource 상속)
+# evaporation 대신 가뭄 이벤트가 소모. reduce_thirst(), fill_rain()
 from grassland.entities.resources.resource import Resource
-from grassland.geometry import Vec2
-
-if TYPE_CHECKING:
-    from grassland.entities.animals.animal import Animal
 
 
 class WaterPuddle(Resource):
-    def __init__(self, position: Vec2, amount: float = 100.0):
-        super().__init__(
-            name="Water_Puddle",
-            position=position,
-            amount=amount,
-            color=(65, 145, 208),
-        )
-        self.radius = 28
+    def __init__(self, position, amount=100.0):
+        super().__init__("Water_Puddle", position, amount,
+                         color=(65, 145, 208), radius=28)
 
-    def reduce_thirst(self, animal: "Animal") -> None:
+    def reduce_thirst(self, animal):
         taken = self.consume(18)
         animal.thirst = max(0.0, animal.thirst - taken)
 
-    def fill_rain(self) -> None:
+    def enable_drinking(self, animal):
+        self.reduce_thirst(animal)
+
+    def fill_rain(self):
         self.regenerate(35)

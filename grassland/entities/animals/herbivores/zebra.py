@@ -1,19 +1,35 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from grassland.entities.animals.carnivores.lion import Lion
-
+# =============================================================================
+# zebra.py — 얼룩말 (계획서 Zebra, Herbivore 상속)
+# 고유 속성: kick_power, alert_radius
+# Fight=kick(), Flight=flee()+AlertHerd()(무리에 경고 전파)
+# =============================================================================
 from grassland.entities.animals.herbivores.herbivore import Herbivore
-from grassland.geometry import Vec2
 
 
 class Zebra(Herbivore):
-    def __init__(self, position: Vec2):
-        super().__init__("Zebra", position, (232, 232, 218), 78.0, 86.0, 7.0, 185.0)
-        self.zigzag_timer = 0.0
+    def __init__(self, position):
+        super().__init__("Zebra", position, (232, 232, 218),
+                         health=78.0, speed=86.0, power=7.0, detect_range=185.0)
+        self.kick_power = 16.0     # 뒷발차기 공격력
+        self.alert_radius = 220.0  # 경고 전파 반경
 
-    def flee_from_lion(self, lion: "Lion", dt: float) -> None:
-        self.fight_or_flight(lion, None, dt)
-        self.action_text = "zigzag"
+    def fight_or_flight(self, threat, world, dt):
+        if self.distance_to(threat) < self.radius + threat.radius + 6:
+            self.kick(threat, world)         # 코너에 몰리면 뒷발차기
+        else:
+            self.move_away_from(threat.position, self.flee_speed)
+            self.alert_herd(world)           # 도망치며 무리에 경고
+            self.action_text = "flee"
+
+    def kick(self, threat, world):
+        old_power, self.power = self.power, self.kick_power
+        self.attack(threat, world)
+        self.power = old_power
+        self.action_text = "kick"
+
+    def alert_herd(self, world):
+        """alert_radius 내 다른 Zebra 를 패닉 상태로 만든다."""
+        for animal in world.living_animals():
+            if animal is not self and animal.name == "Zebra" \
+                    and self.distance_to(animal) <= self.alert_radius:
+                animal.panic_boost_timer = max(animal.panic_boost_timer, 3.0)
