@@ -4,15 +4,16 @@
 # World 가 하는 일:
 #   - 동물·식물·자원·지형 목록을 보관한다.
 #   - Environment(시간/날씨) 와 PhysicsEngine 인스턴스를 하나씩 들고 있다.
-#   - seed_default() 로 맵에 실제 Entity(사자·얼룩말·풀 등)를 배치한다.
+#   - seed_default() 로 맵에 실제 Entity(사자·얼룩말·풀 등)를 '랜덤하게' 배치한다.
 #   - update(dt) 가 매 프레임 환경→동물/식물 결정→물리→후처리 순서로 지휘한다.
 #   - 동물이 행동을 결정할 때 필요한 '가장 가까운 무엇' 질의를 제공한다.
-# World 는 Environment 를 정의하지 않고(→ environment.py), 그리지도 않는다(→ gui).
+# 좌표 연산은 pygame.math.Vector2 에 위임한다.
 # =============================================================================
 import random
 
+from pygame.math import Vector2
+
 from grassland.config import SEED_COUNTS, WORLD_HEIGHT, WORLD_WIDTH
-from grassland.geometry import Vec2
 from grassland.physics import PhysicsEngine
 from grassland.environment import Environment, DroughtEvent
 
@@ -43,6 +44,7 @@ class World:
         self.terrains = []
         self.drought_event = None
         self._pending_animals = []     # 이번 프레임에 태어난 새끼(끝나고 합침)
+        self._occupied = []            # (position, radius) — 큰 구조물 겹침 방지용
 
     # ── 초기 배치 ────────────────────────────────────────────────────────
     @classmethod
@@ -54,26 +56,72 @@ class World:
         world.seed_animals()
         return world
 
+    # ── 랜덤 배치 헬퍼 ───────────────────────────────────────────────────
+    def _random_spot(self, margin=120):
+        return Vector2(random.uniform(margin, self.width - margin),
+                       random.uniform(margin, self.height - margin))
+
+    def _find_spot(self, clearance, margin=120, tries=40):
+        """이미 놓인 큰 구조물들과 clearance 이상 떨어진 빈 자리를 찾는다.
+        충분히 못 찾으면 마지막 후보라도 반환(맵이 꽉 차도 멈추지 않게)."""
+        spot = self._random_spot(margin)
+        for _ in range(tries):
+            spot = self._random_spot(margin)
+            if all(spot.distance_to(pos) >= clearance + rad
+                   for pos, rad in self._occupied):
+                break
+        return spot
+
+    def _place(self, entity, clearance_radius=None):
+        """entity 를 _occupied 에 등록해 이후 배치가 겹치지 않게 한다."""
+        rad = entity.radius if clearance_radius is None else clearance_radius
+        self._occupied.append((entity.position, rad))
+        return entity
+
     def seed_terrain(self):
-        # Plain: 배경(맵 전체). Lake_Side·Cave 는 서로 멀리 떨어뜨려 겹치지 않게 배치.
-        self.terrains.append(Plain(Vec2(self.width / 2, self.height / 2),
+        # Plain: 배경(맵 전체). 이건 겹침 대상이 아니다.
+        self.terrains.append(Plain(Vector2(self.width / 2, self.height / 2),
                                    max(self.width, self.height)))
-        self.terrains.append(LakeSide(Vec2(360, 320)))
-        self.terrains.append(Cave(Vec2(1980, 1240)))
+        # 호숫가 1~2개, 동굴 2~3개를 서로 멀찍이 흩뿌린다.
+        for _ in range(random.randint(1, 2)):
+            lake = LakeSide(self._find_spot(220), size=random.uniform(70, 100))
+            self.terrains.append(lake)
+            self._place(lake, lake.radius)
+        for _ in range(random.randint(2, 3)):
+            cave = Cave(self._find_spot(180), size=random.uniform(55, 78))
+            self.terrains.append(cave)
+            self._place(cave, cave.radius)
 
     def seed_plants(self):
-        for pos in [(560, 360), (820, 520), (1180, 470), (1500, 760), (2050, 560)]:
-            self.plants.append(Grass(Vec2(*pos)))
-        self.plants.append(Bush(Vec2(980, 300)))
-        self.plants.append(Bush(Vec2(1650, 1050)))
-        self.plants.append(AcaciaTree(Vec2(720, 980)))
-        self.plants.append(BaobabTree(Vec2(1350, 1180)))
+        # 풀: 몇 개의 '군락' 중심을 잡고 그 주변에 흩뿌려 자연스러운 패치를 만든다.
+        for _ in range(random.randint(3, 5)):
+            center = self._find_spot(90)
+            for _ in range(random.randint(2, 4)):
+                offset = Vector2(random.uniform(-110, 110), random.uniform(-110, 110))
+                pos = self._clamp(center + offset, 70)
+                self.plants.append(Grass(pos))
+        # 덤불·아카시아·바오밥은 넓게 흩뿌린다(큰 식물끼리는 안 겹치게).
+        for _ in range(random.randint(3, 5)):
+            bush = Bush(self._find_spot(70))
+            self.plants.append(bush)
+            self._place(bush)
+        for _ in range(random.randint(2, 4)):
+            tree = AcaciaTree(self._find_spot(110))
+            self.plants.append(tree)
+            self._place(tree)
+        for _ in range(random.randint(1, 2)):
+            baobab = BaobabTree(self._find_spot(140))
+            self.plants.append(baobab)
+            self._place(baobab)
 
     def seed_resources(self):
-        # 물웅덩이는 호숫가와 떨어진 곳에 둔다(겹침 방지).
-        self.resources.append(WaterPuddle(Vec2(1500, 320)))
-        self.resources.append(WaterPuddle(Vec2(900, 1300)))
-        self.resources.append(Carcass(Vec2(1200, 700)))
+        # 물웅덩이 3~5개(호숫가·서로와 떨어뜨림), 사체 1~2개(랜덤 위치).
+        for _ in range(random.randint(3, 5)):
+            puddle = WaterPuddle(self._find_spot(150))
+            self.resources.append(puddle)
+            self._place(puddle)
+        for _ in range(random.randint(1, 2)):
+            self.resources.append(Carcass(self._random_spot()))
 
     def seed_animals(self):
         """config.SEED_COUNTS 만큼 동물을 무작위 위치에 배치한다."""
@@ -82,9 +130,10 @@ class World:
             for _ in range(count):
                 self.animals.append(cls(self._random_spot()))
 
-    def _random_spot(self):
-        return Vec2(random.uniform(120, self.width - 120),
-                    random.uniform(120, self.height - 120))
+    def _clamp(self, pos, margin):
+        """pos 를 맵 안(가장자리 margin)으로 강제한다."""
+        return Vector2(max(margin, min(pos.x, self.width - margin)),
+                       max(margin, min(pos.y, self.height - margin)))
 
     # ── 매 프레임 갱신 ───────────────────────────────────────────────────
     def update(self, dt):
@@ -131,14 +180,13 @@ class World:
         """살아있는 풀이 씨앗을 퍼뜨려 가끔 주변에 새 풀이 자란다(계획서 spread_seeds).
         풀 공급이 끊겨 초원이 사막화되는 것을 막는다. 전체 풀 수는 상한으로 제한."""
         grasses = [p for p in self.plants if p.alive and p.name == "Grass"]
-        if len(grasses) >= 12:
+        if len(grasses) >= 16:
             return
         for grass in grasses:
             if random.random() < 0.02 * dt * 60:   # 프레임레이트에 무관하게
                 grass.spread_seeds()
-                offset = Vec2(random.uniform(-90, 90), random.uniform(-90, 90))
-                pos = (grass.position + offset).clamp(
-                    80, 80, self.width - 80, self.height - 80)
+                offset = Vector2(random.uniform(-90, 90), random.uniform(-90, 90))
+                pos = self._clamp(grass.position + offset, 80)
                 self.plants.append(Grass(pos))
                 break
 
@@ -172,11 +220,11 @@ class World:
 
     # ── 생성/사망 ────────────────────────────────────────────────────────
     def spawn_carcass(self, animal):
-        self.resources.append(Carcass(animal.position.copy()))
+        self.resources.append(Carcass(Vector2(animal.position)))
 
     def spawn_offspring(self, parent):
-        offset = Vec2(random.uniform(-30, 30), random.uniform(-30, 30))
-        pos = (parent.position + offset).clamp(60, 60, self.width - 60, self.height - 60)
+        offset = Vector2(random.uniform(-30, 30), random.uniform(-30, 30))
+        pos = self._clamp(parent.position + offset, 60)
         self._pending_animals.append(_ANIMAL_TYPES[parent.name](pos))
 
     # ── 컬렉션 질의 ──────────────────────────────────────────────────────

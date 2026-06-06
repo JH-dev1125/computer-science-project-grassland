@@ -16,10 +16,11 @@ import pygame
 
 from grassland.config import (
     BACKGROUND_COLOR, FPS, GRID_COLOR, MIN_SCREEN_HEIGHT, MIN_SCREEN_WIDTH,
-    PANEL_BORDER, PANEL_COLOR, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT_COLOR,
-    WEATHER_TINT,
+    PANEL_BORDER, PANEL_COLOR, SCREEN_HEIGHT, SCREEN_WIDTH, SPRITE_VISUAL_SCALE,
+    TEXT_COLOR, WEATHER_TINT,
 )
-from grassland.geometry import Vec2
+from grassland.sprites import get_sprite
+from pygame.math import Vector2
 
 
 class GrasslandApp:
@@ -32,7 +33,7 @@ class GrasslandApp:
             (self.screen_width, self.screen_height), pygame.RESIZABLE)
         self.clock = pygame.time.Clock()
         self.world = world
-        self.camera = Vec2(220, 180)      # 화면 좌상단이 바라보는 월드 좌표
+        self.camera = Vector2(220, 180)   # 화면 좌상단이 바라보는 월드 좌표
         self.dragging = False
         self.font = self._font(17)
         self.small_font = self._font(13)
@@ -87,6 +88,24 @@ class GrasslandApp:
         return -margin <= x <= self.screen_width + margin and \
                -margin <= y <= self.screen_height + margin
 
+    # ── 스프라이트(이미지) 그리기 ────────────────────────────────────────
+    def blit_sprite(self, entity, x, y):
+        """entity 의 PNG 를 (x,y) 중심에 그린다.
+        크기는 충돌 반지름 × 종류별 표시 배율 × 개체별 draw_scale 로 정한다.
+        이미지를 못 찾으면(파일명 오타 등) 자주색 점만 찍어 '여기 그림이 없다'를
+        알려 준다 — 디버그용 최소 안전장치."""
+        scale = SPRITE_VISUAL_SCALE.get(entity.kind, 2.2)
+        size = int(entity.radius * 2 * scale * entity.draw_scale)
+        sprite = get_sprite(entity.name.lower(), size)
+        if sprite is None:
+            pygame.draw.circle(self.screen, (210, 60, 210),
+                               (x, y), max(4, int(entity.radius * 0.4)))
+            return
+        if getattr(entity, "is_hidden", False):   # 숨으면 반투명하게
+            sprite = sprite.copy()
+            sprite.set_alpha(130)
+        self.screen.blit(sprite, sprite.get_rect(center=(x, y)))
+
     # ── 그리기(아래 레이어 → 위 레이어 순서) ─────────────────────────────
     def draw(self):
         self.screen.fill(BACKGROUND_COLOR)   # 평원 배경
@@ -118,13 +137,7 @@ class GrasslandApp:
                 continue
             x, y = self.world_to_screen(terrain.position)
             r = int(terrain.radius)
-            if terrain.name == "Lake_Side":
-                pygame.draw.circle(self.screen, terrain.color, (x, y), r)
-                pygame.draw.circle(self.screen, (43, 101, 149), (x, y), r, 3)
-            elif terrain.name == "Cave":
-                rect = pygame.Rect(0, 0, r * 2, int(r * 1.4)); rect.center = (x, y)
-                pygame.draw.ellipse(self.screen, terrain.color, rect)
-                pygame.draw.ellipse(self.screen, (48, 43, 39), rect, 3)
+            self.blit_sprite(terrain, x, y)
             self.label(terrain.name, x, y + r + 8, self.small_font)
 
     def draw_plants(self):
@@ -133,9 +146,7 @@ class GrasslandApp:
                 continue
             x, y = self.world_to_screen(plant.position)
             size = int(plant.radius * 1.45)
-            rect = pygame.Rect(0, 0, size, size); rect.center = (x, y)
-            pygame.draw.rect(self.screen, plant.color, rect, border_radius=5)
-            pygame.draw.rect(self.screen, (48, 91, 48), rect, 2, border_radius=5)
+            self.blit_sprite(plant, x, y)
             self.label(plant.name, x, y + size // 2 + 10, self.small_font)
 
     def draw_resources(self):
@@ -144,13 +155,7 @@ class GrasslandApp:
                 continue
             x, y = self.world_to_screen(resource.position)
             r = int(resource.radius)
-            if resource.name == "Water_Puddle":
-                pygame.draw.circle(self.screen, resource.color, (x, y), r)
-                pygame.draw.circle(self.screen, (36, 95, 158), (x, y), r, 2)
-            else:  # Carcass
-                rect = pygame.Rect(0, 0, int(r * 1.6), int(r * 1.2)); rect.center = (x, y)
-                pygame.draw.rect(self.screen, resource.color, rect, border_radius=4)
-                pygame.draw.rect(self.screen, (76, 43, 29), rect, 2, border_radius=4)
+            self.blit_sprite(resource, x, y)
             self.label(resource.name, x, y + r + 10, self.small_font)
 
     def draw_animals(self):
@@ -159,12 +164,7 @@ class GrasslandApp:
                 continue
             x, y = self.world_to_screen(animal.position)
             size = int(animal.radius * 2)
-            rect = pygame.Rect(0, 0, size, size); rect.center = (x, y)
-            color = animal.color
-            if animal.is_hidden:             # 숨으면 어둡게
-                color = tuple(max(35, int(c * 0.65)) for c in color)
-            pygame.draw.rect(self.screen, color, rect, border_radius=6)
-            pygame.draw.rect(self.screen, (40, 43, 35), rect, 2, border_radius=6)
+            self.blit_sprite(animal, x, y)
             self.health_bar(animal, x, y - size // 2 - 9, size)
             self.label(animal.name, x, y + size // 2 + 9, self.small_font)
             if animal.action_text:

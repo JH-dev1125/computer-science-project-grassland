@@ -12,14 +12,14 @@ from typing import Optional, TYPE_CHECKING
 
 from grassland.entities.animals.animal import Animal
 from grassland.entities.animals.herbivores.herbivore import Herbivore
-from grassland.geometry import Vec2
+from pygame.math import Vector2
 
 if TYPE_CHECKING:
     from grassland.world import World
 
 
 class Elephant(Herbivore):
-    def __init__(self, position: Vec2):
+    def __init__(self, position: Vector2):
         super().__init__(
             "Elephant", position, (132, 132, 123), 165.0, 52.0, 28.0, 220.0
         )

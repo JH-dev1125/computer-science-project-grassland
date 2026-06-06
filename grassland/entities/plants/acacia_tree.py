@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from grassland.entities.plants.plant import Plant
-from grassland.geometry import Vec2
+from pygame.math import Vector2
 
 if TYPE_CHECKING:
     from grassland.world import World
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class AcaciaTree(Plant):
-    def __init__(self, position: Vec2):
+    def __init__(self, position: Vector2):
         super().__init__(
             name="Acacia_Tree",
             position=position,

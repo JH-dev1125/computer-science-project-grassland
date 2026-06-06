@@ -1,11 +1,18 @@
 # =============================================================================
 # entities/animals/animal.py — 모든 동물의 공통 부모 (계획서 Animal)
 # 계획서에 명시된 공통 속성/메서드만 둔다. 종별 행동은 자식이 오버라이드.
+#
+# [움직임 철학]
+#   평소(상호작용 없음)  : wander() — '상관 랜덤워크'. 진행 방향(heading)을 매
+#                          프레임 아주 조금씩만 틀어 부드럽게 휘어 다닌다.
+#   상호작용 발생(추격·도주·먹이·물) : move_toward/away 로 '특정 방향' 지향.
+#   어느 쪽이든 desired_velocity 만 적고, 실제 가감속·회전은 physics 가 부드럽게.
 # =============================================================================
 import random
 
+from pygame.math import Vector2
+
 from grassland.entities.base import Entity
-from grassland.geometry import Vec2, random_unit_vector
 
 
 class Animal(Entity):
@@ -28,13 +35,13 @@ class Animal(Entity):
         self.is_hidden = False
         self.age = 0.0
         self.diet_type = ""          # 자식이 herbivore/carnivore/omnivore 로 설정
-        self.decision_timer = random.uniform(0.2, 1.4)
         self._carcass_spawned = False
+        # ── 랜덤워크 상태 ────────────────────────────────────────────
+        self.heading = random.uniform(0.0, 360.0)     # 현재 진행 방향(도)
+        self.wander_timer = random.uniform(0.4, 2.0)   # 다음 '쉼/이동' 전환까지
+        self.is_resting = False                        # 잠깐 멈춰 주변을 살피는 중
 
     # ── 계획서 공통 메서드 ───────────────────────────────────────────
-    def move(self, direction):
-        self.velocity = direction.normalized() * self.speed
-
     def eat(self, food):
         """food 는 consume(amount) 또는 reduce_hunger(self) 를 가진 객체(덕 타이핑)."""
         if hasattr(food, "reduce_hunger"):        # 사체 등
@@ -66,7 +73,8 @@ class Animal(Entity):
         if not self.alive:
             return
         self.alive = False
-        self.stop()
+        self.velocity = Vector2()          # 죽으면 즉시 정지
+        self.desired_velocity = Vector2()
         self.action_text = "dead"
         if world is not None and not self._carcass_spawned:
             self._carcass_spawned = True
@@ -128,18 +136,26 @@ class Animal(Entity):
         return True
 
     def wander(self, dt):
-        """할 일이 없을 때 무작위로 어슬렁."""
-        self.decision_timer -= dt
-        if self.decision_timer > 0:
-            return
-        self.decision_timer = random.uniform(0.8, 2.2)
-        if random.random() < 0.22:
+        """할 일이 없을 때 — '상관 랜덤워크'로 부드럽게 어슬렁.
+        진행 방향(heading)을 매 프레임 작은 각도만 흔들어, 직선+급회전이 아니라
+        완만하게 휘어지는 경로를 만든다. 가끔 잠깐 멈춰 주변을 살핀다."""
+        # 1) 가끔 '쉼 ↔ 이동' 상태를 바꾼다
+        self.wander_timer -= dt
+        if self.wander_timer <= 0.0:
+            self.is_resting = random.random() < 0.22
+            self.wander_timer = random.uniform(1.2, 3.2)
+
+        if self.is_resting:
             self.stop()
             self.action_text = "watch"
             return
-        self.velocity = random_unit_vector() * random.uniform(
-            self.speed * 0.18, self.speed * 0.45)
-        self.action_text = "move"
+
+        # 2) heading 을 조금씩만 회전(부드러운 곡선). dt 곱으로 프레임레이트 무관.
+        self.heading += random.uniform(-70.0, 70.0) * dt
+        direction = Vector2(1.0, 0.0).rotate(self.heading)
+        cruise = self.speed * random.uniform(0.28, 0.40)
+        self.desired_velocity = direction * cruise
+        self.action_text = "wander"
 
     # ── 매 틱 갱신(자식이 오버라이드) ────────────────────────────────
     def update(self, world, dt):

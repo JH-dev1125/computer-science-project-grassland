@@ -4,14 +4,14 @@ from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from grassland.world import World
 from grassland.entities.animals.animal import Animal
-from grassland.geometry import Vec2
+from pygame.math import Vector2
 
 
 class Herbivore(Animal):
     def __init__(
         self,
         name: str,
-        position: Vec2,
+        position: Vector2,
         color: tuple[int, int, int],
         health: float,
         speed: float,
