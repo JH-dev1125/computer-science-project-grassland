@@ -19,7 +19,7 @@ from grassland.config import (
     PANEL_BORDER, PANEL_COLOR, SCREEN_HEIGHT, SCREEN_WIDTH, SKY_BAND_HEIGHT,
     SPRITE_DISPLAY_DEFAULT, SPRITE_DISPLAY_SIZE, TEXT_COLOR, WEATHER_TINT,
 )
-from grassland.sprites import get_sprite, get_background, get_sky_image
+from grassland.sprites import get_sprite, get_background, get_sky_image, get_weather_icon
 from pygame.math import Vector2
 
 
@@ -489,6 +489,24 @@ class GrasslandApp:
         tint.fill(color)
         self.screen.blit(tint, (0, 0))
 
+    def _weather_icon(self, name, size):
+        """날씨 아이콘을 size(긴 변, px)에 맞춰 한 번만 키워 캐시한다."""
+        cache = getattr(self, "_weather_icon_cache", None)
+        if cache is None:
+            cache = self._weather_icon_cache = {}
+        scaled = cache.get(name)
+        if scaled is None:
+            img = get_weather_icon(name)
+            if img is None:
+                cache[name] = False
+                return None
+            w, h = img.get_size()
+            scale = size / max(w, h)
+            new_size = (max(1, round(w * scale)), max(1, round(h * scale)))
+            scaled = pygame.transform.smoothscale(img, new_size)
+            cache[name] = scaled
+        return scaled or None
+
     def draw_ui(self):
         # 정보 패널을 '좌하단'에 둔다(상단은 하늘 띠가 차지하므로).
         ph = 92
@@ -497,9 +515,21 @@ class GrasslandApp:
         pygame.draw.rect(self.screen, PANEL_COLOR, panel, border_radius=8)
         pygame.draw.rect(self.screen, PANEL_BORDER, panel, 2, border_radius=8)
         env = self.world.environment
-        title = f"Day {env.day}  {env.clock_text()}   Weather: {env.weather}   Temp: {env.temperature}C"
-        self.screen.blit(self.title_font.render(title, True, TEXT_COLOR),
-                         (panel.x + 16, panel.y + 12))
+        title = f"Day {env.day}  {env.clock_text()}   Temp: {env.temperature}C"
+        tx, ty = panel.x + 16, panel.y + 12
+        title_surf = self.title_font.render(title, True, TEXT_COLOR)
+        self.screen.blit(title_surf, (tx, ty))
+        tx += title_surf.get_width() + 12
+        # 날씨: 아이콘이 있으면 "sunny" 같은 영문 대신 그림으로 표시
+        icon_size = 64
+        icon = self._weather_icon(env.weather, icon_size)
+        if icon is not None:
+            # 패널 세로 중앙에 맞춰 배치(아이콘이 글자보다 커서, 패널 전체 높이 기준 중앙정렬).
+            icon_y = panel.y + (panel.height - icon.get_height()) // 2
+            self.screen.blit(icon, (tx, icon_y))
+        else:
+            fallback = self.title_font.render(f"Weather: {env.weather}", True, TEXT_COLOR)
+            self.screen.blit(fallback, (tx, ty))
         counts = self.world.counts_by_name()
         ctext = " | ".join(f"{n}:{c}" for n, c in sorted(counts.items()))
         self.screen.blit(self.font.render(ctext, True, TEXT_COLOR),

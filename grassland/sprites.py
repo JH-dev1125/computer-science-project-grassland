@@ -98,9 +98,34 @@ def get_sky_image(name):
     return surface
 
 
+_weather_icons: dict = {}   # {weather 이름: Surface 또는 None} 한 번만 로드해 캐시
+
+
+def get_weather_icon(name):
+    """날씨 아이콘을 돌려준다(assets/sprites/weather_<name>.png).
+    파일이 없으면 None → gui 가 영문 텍스트로 대신 표시한다."""
+    if name in _weather_icons:
+        return _weather_icons[name]
+    path = _BASE_DIR / "assets" / "sprites" / f"weather_{name}.png"
+    surface = None
+    if path.exists():
+        try:
+            surface = pygame.image.load(str(path)).convert_alpha()
+            # 그림 둘레의 투명/흰 여백을 잘라내, 실제 아이콘만 꽉 차게 쓴다
+            # (여백이 넓으면 작게 그려도 실제 그림은 더 작아 보이는 문제 방지).
+            rect = surface.get_bounding_rect(min_alpha=24)
+            if rect.width > 0 and rect.height > 0:
+                surface = surface.subsurface(rect).copy()
+        except pygame.error:
+            surface = None
+    _weather_icons[name] = surface
+    return surface
+
+
 def clear_cache() -> None:
     """런타임 중 이미지를 새로 넣고 다시 읽고 싶을 때 캐시를 비운다."""
     _originals.clear()
     _scaled.clear()
     _background.clear()
     _sky_images.clear()
+    _weather_icons.clear()
