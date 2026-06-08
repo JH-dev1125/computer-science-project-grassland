@@ -79,3 +79,4 @@ class BaldEagle(Carnivore):
             return True
         self.fly()
         return False
+
