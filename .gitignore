@@ -31,3 +31,8 @@ tempCodeRunnerFile.py
 .env
 .envrc
 
+# Office temp/lock files
+~$*.docx
+~$*.xlsx
+~$*.pptx
+

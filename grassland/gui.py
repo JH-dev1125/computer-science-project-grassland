@@ -146,6 +146,16 @@ class GrasslandApp:
         self.screen.blit(sprite, rect)
         return rect
 
+    def draw_shadow(self, entity, x, y, altitude):
+        """떠오른 동물의 발밑(원래 바닥 위치)에 옅은 타원 그림자를 그려 '뜬' 느낌을 강조한다.
+        높이 뜰수록 그림자는 작아지고 옅어진다(독수리가 하늘로 멀어지는 인상)."""
+        w = max(16, self.display_size(entity) // 2)
+        h = max(5, w // 3)
+        fade = max(15, 90 - int(altitude * 1.4))
+        shadow = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow, (20, 20, 20, fade), shadow.get_rect())
+        self.screen.blit(shadow, shadow.get_rect(center=(x, y)))
+
     # 바닥에 '누운' 것들(평면). 나머지는 '서 있는' 것으로 보고 발밑을 바닥에 딛는다.
     FLAT_NAMES = ("Lake_Side", "Water_Puddle", "Carcass")
 
@@ -225,19 +235,14 @@ class GrasslandApp:
         for e in upright:
             x, y = self.world_to_screen(e.position)
             if e.kind == "animal":
-                dt = getattr(self, 'dt', 0.0)
-                if not hasattr(e, '_flip_cooldown'):
-                    e._flip_cooldown = 0.0
-                e._flip_cooldown = max(0.0, e._flip_cooldown - dt)
-                dvx = e.desired_velocity.x
-                if e._flip_cooldown <= 0.0:
-                    if dvx > 8:
-                        e.facing_left = False
-                        e._flip_cooldown = 0.4
-                    elif dvx < -8:
-                        e.facing_left = True
-                        e._flip_cooldown = 0.4
-                rect = self.blit_sprite(e, x, y, flip=not getattr(e, "facing_left", True),
+                if e.velocity.x > 6:
+                    e.facing_left = False
+                elif e.velocity.x < -6:
+                    e.facing_left = True
+                altitude = getattr(e, "altitude", 0.0)
+                if altitude > 0.5:
+                    self.draw_shadow(e, x, y, altitude)
+                rect = self.blit_sprite(e, x, y - altitude, flip=not getattr(e, "facing_left", True),
                                         anchor="bottom")
                 self.health_bar(e, x, rect.top - 6, self.display_size(e))
                 if e is self.selected:   # 선택된 몹은 발밑에 고리를 그려 표시
