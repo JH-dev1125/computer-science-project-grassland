@@ -13,7 +13,9 @@ import random
 
 from pygame.math import Vector2
 
-from grassland.config import SEED_COUNTS, WORLD_HEIGHT, WORLD_WIDTH
+from grassland.config import (
+    SEED_COUNTS, WORLD_HEIGHT, WORLD_WIDTH,
+    SPRITE_DISPLAY_SIZE, SPRITE_DISPLAY_DEFAULT)
 from grassland.physics import PhysicsEngine
 from grassland.environment import Environment, DroughtEvent
 
@@ -50,9 +52,9 @@ class World:
     @classmethod
     def seed_default(cls):
         world = cls()
-        world.seed_terrain()
-        world.seed_plants()
-        world.seed_resources()
+        world.seed_structures()   # 큰 구조물: 격자 셀에 한 개씩(겹침 0 보장)
+        world.seed_grass()        # 풀: 구조물 위는 피해서 빽빽이
+        world.seed_carcasses()
         world.seed_animals()
         return world
 
@@ -72,55 +74,68 @@ class World:
                 break
         return spot
 
-    def _place(self, entity, clearance_radius=None):
-        """entity 를 _occupied 에 등록해 이후 배치가 겹치지 않게 한다."""
-        rad = entity.radius if clearance_radius is None else clearance_radius
-        self._occupied.append((entity.position, rad))
-        return entity
+    def _vis_r(self, name):
+        """화면에 그려지는 '시각적' 반지름. 표시 크기의 절반."""
+        return SPRITE_DISPLAY_SIZE.get(name, SPRITE_DISPLAY_DEFAULT) / 2.0
 
-    def seed_terrain(self):
-        # Plain: 배경(맵 전체). 이건 겹침 대상이 아니다.
+    def seed_structures(self):
+        """큰 구조물(호숫가·동굴·나무·덤불·물웅덩이)을 '격자 셀'에 한 개씩 배치한다.
+        각 구조물은 자기 셀을 벗어나지 않게(셀-크기-시각크기 만큼만 흔들림) 두므로,
+        셀끼리 안 겹치는 한 구조물도 절대 안 겹친다 → 겹침 0 보장 + 골고루 분포."""
         self.terrains.append(Plain(Vector2(self.width / 2, self.height / 2),
                                    max(self.width, self.height)))
-        # 호숫가 1~2개, 동굴 2~3개를 서로 멀찍이 흩뿌린다.
+        cell = 250                                  # 가장 큰 구조물(호숫가 230)이 들어갈 셀
+        cols = max(1, int(self.width // cell))
+        rows = max(1, int(self.height // cell))
+        cell_w, cell_h = self.width / cols, self.height / rows
+        cells = [((c + 0.5) * cell_w, (r + 0.5) * cell_h)
+                 for r in range(rows) for c in range(cols)]
+        random.shuffle(cells)
+
+        # 배치할 구조물 목록 (이름, 생성자, 담을 리스트). 가로로 긴 한 줄 격자에 맞춰 적당히.
+        specs = []
         for _ in range(random.randint(1, 2)):
-            lake = LakeSide(self._find_spot(220), size=random.uniform(70, 100))
-            self.terrains.append(lake)
-            self._place(lake, lake.radius)
+            specs.append(("Lake_Side", lambda p: LakeSide(p, size=random.uniform(75, 95)), self.terrains))
         for _ in range(random.randint(2, 3)):
-            cave = Cave(self._find_spot(180), size=random.uniform(55, 78))
-            self.terrains.append(cave)
-            self._place(cave, cave.radius)
-
-    def seed_plants(self):
-        # 풀: 몇 개의 '군락' 중심을 잡고 그 주변에 흩뿌려 자연스러운 패치를 만든다.
+            specs.append(("Cave", lambda p: Cave(p, size=random.uniform(55, 75)), self.terrains))
+        for _ in range(random.randint(2, 3)):
+            specs.append(("Acacia_Tree", AcaciaTree, self.plants))
+        for _ in range(random.randint(1, 2)):
+            specs.append(("Baobab_Tree", BaobabTree, self.plants))
+        for _ in range(random.randint(2, 3)):
+            specs.append(("Water_Puddle", WaterPuddle, self.resources))
         for _ in range(random.randint(3, 5)):
-            center = self._find_spot(90)
-            for _ in range(random.randint(2, 4)):
-                offset = Vector2(random.uniform(-110, 110), random.uniform(-110, 110))
-                pos = self._clamp(center + offset, 70)
+            specs.append(("Bush", Bush, self.plants))
+        random.shuffle(specs)
+        specs = specs[:len(cells)]                  # 셀 수를 넘지 않게
+
+        for (name, make, target), (cx, cy) in zip(specs, cells):
+            vis = self._vis_r(name) * 2             # 시각 지름
+            jx = max(0.0, (cell_w - vis) / 2 - 8)   # 셀을 벗어나지 않는 흔들림 한계
+            jy = max(0.0, (cell_h - vis) / 2 - 8)
+            pos = self._clamp(Vector2(cx + random.uniform(-jx, jx),
+                                      cy + random.uniform(-jy, jy)), 40)
+            ent = make(pos)
+            target.append(ent)
+            self._occupied.append((ent.position, self._vis_r(name)))
+
+    def _on_structure(self, pos):
+        """pos 가 이미 놓인 구조물의 시각 범위 안인가(풀이 구조물 위에 깔리는 것 방지)."""
+        return any(pos.distance_to(p) < rad for p, rad in self._occupied)
+
+    def seed_grass(self):
+        """풀: 군락으로 빽빽이 흩뿌리되, 구조물(나무·물·동굴 등) 위에는 깔지 않는다."""
+        for _ in range(random.randint(16, 22)):
+            center = self._random_spot(70)
+            for _ in range(random.randint(5, 9)):
+                offset = Vector2(random.uniform(-55, 55), random.uniform(-55, 55))
+                pos = self._clamp(center + offset, 40)
+                if self._on_structure(pos):
+                    continue
                 self.plants.append(Grass(pos))
-        # 덤불·아카시아·바오밥은 넓게 흩뿌린다(큰 식물끼리는 안 겹치게).
-        for _ in range(random.randint(3, 5)):
-            bush = Bush(self._find_spot(70))
-            self.plants.append(bush)
-            self._place(bush)
-        for _ in range(random.randint(2, 4)):
-            tree = AcaciaTree(self._find_spot(110))
-            self.plants.append(tree)
-            self._place(tree)
-        for _ in range(random.randint(1, 2)):
-            baobab = BaobabTree(self._find_spot(140))
-            self.plants.append(baobab)
-            self._place(baobab)
 
-    def seed_resources(self):
-        # 물웅덩이 3~5개(호숫가·서로와 떨어뜨림), 사체 1~2개(랜덤 위치).
-        for _ in range(random.randint(3, 5)):
-            puddle = WaterPuddle(self._find_spot(150))
-            self.resources.append(puddle)
-            self._place(puddle)
-        for _ in range(random.randint(1, 2)):
+    def seed_carcasses(self):
+        for _ in range(random.randint(2, 3)):
             self.resources.append(Carcass(self._random_spot()))
 
     def seed_animals(self):
@@ -134,6 +149,21 @@ class World:
         """pos 를 맵 안(가장자리 margin)으로 강제한다."""
         return Vector2(max(margin, min(pos.x, self.width - margin)),
                        max(margin, min(pos.y, self.height - margin)))
+
+    def obstacles(self):
+        """동물이 통과 못 하는 '벽' 목록 (위치, 막는 반지름).
+        나무(아카시아·바오밥)와 물(호숫가·물웅덩이)만 벽 — 풀·덤불·동굴은 통과 가능."""
+        obs = []
+        for p in self.plants:
+            if p.alive and isinstance(p, (AcaciaTree, BaobabTree)):
+                obs.append((p.position, p.radius))
+        for t in self.terrains:
+            if isinstance(t, LakeSide):
+                obs.append((t.position, t.radius))
+        for r in self.resources:
+            if r.alive and isinstance(r, WaterPuddle):
+                obs.append((r.position, r.radius))
+        return obs
 
     # ── 매 프레임 갱신 ───────────────────────────────────────────────────
     def update(self, dt):
@@ -154,6 +184,7 @@ class World:
         # 4) 물리: 충돌 분리 + 이동 + 맵 경계, 그리고 지형 효과
         living = self.living_animals()
         self.physics.update(living, dt)
+        self.physics.resolve_obstacles(living, self.obstacles())   # 나무·물가 = 벽
         self.physics.apply_terrain_effects(living, self.terrains)
         # 5) 자원 갱신 + 후처리(번식·사망 정리)
         for resource in self.resources:
@@ -180,13 +211,15 @@ class World:
         """살아있는 풀이 씨앗을 퍼뜨려 가끔 주변에 새 풀이 자란다(계획서 spread_seeds).
         풀 공급이 끊겨 초원이 사막화되는 것을 막는다. 전체 풀 수는 상한으로 제한."""
         grasses = [p for p in self.plants if p.alive and p.name == "Grass"]
-        if len(grasses) >= 16:
+        if len(grasses) >= 140:
             return
         for grass in grasses:
             if random.random() < 0.02 * dt * 60:   # 프레임레이트에 무관하게
                 grass.spread_seeds()
                 offset = Vector2(random.uniform(-90, 90), random.uniform(-90, 90))
                 pos = self._clamp(grass.position + offset, 80)
+                if self._on_structure(pos):        # 구조물 위에는 안 자람
+                    break
                 self.plants.append(Grass(pos))
                 break
 

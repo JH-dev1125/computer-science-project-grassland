@@ -36,6 +36,9 @@ class Animal(Entity):
         self.age = 0.0
         self.diet_type = ""          # 자식이 herbivore/carnivore/omnivore 로 설정
         self._carcass_spawned = False
+        # ── 전투 쿨다운: 공격이 매 프레임 들어가 즉사하는 것을 막는다 ──────
+        self.attack_timer = 0.0      # 0 이하일 때만 실제 타격이 들어간다
+        self.attack_cooldown = 0.7   # 한 번 때린 뒤 다음 타격까지(초)
         # ── 랜덤워크 상태 ────────────────────────────────────────────
         self.heading = random.uniform(0.0, 360.0)     # 현재 진행 방향(도)
         self.wander_timer = random.uniform(0.4, 2.0)   # 다음 '쉼/이동' 전환까지
@@ -87,13 +90,23 @@ class Animal(Entity):
         return self.distance_to(target)
 
     def attack(self, target, world):
+        """공격. 단, 쿨다운 중이면 '겨누는' 모션만 하고 실제 타격은 안 들어간다.
+        (매 프레임 데미지가 들어가 즉사하던 문제를 막는다 — 초당 ~1.4회만 타격)"""
         if not target.alive:
             return
+        self.action_text = "attack"
+        if self.attack_timer > 0.0:
+            return
+        self.attack_timer = self.attack_cooldown
         target.health -= self.power
         target.stress = min(100.0, target.stress + 8.0)
-        self.action_text = "attack"
         if target.health <= 0:
             target.die(world)
+
+    def tick_combat(self, dt):
+        """전투 쿨다운 감소 — 매 update 에서 호출."""
+        if self.attack_timer > 0.0:
+            self.attack_timer = max(0.0, self.attack_timer - dt)
 
     def couple(self, one, other):
         """번식 성공 여부(확률 1/2). World 가 호출해 새 개체를 만든다."""
@@ -103,6 +116,7 @@ class Animal(Entity):
 
     def recover_stamina(self, dt):
         self.stamina = min(100.0, self.stamina + self.stamina_recovery_rate * dt)
+        self.tick_combat(dt)   # 모든 동물이 매 update 에서 호출 → 전투 쿨다운 감소
 
     # ── 공통 행동 보조(여러 종이 공유) ───────────────────────────────
     def seek_water_if_needed(self, world):

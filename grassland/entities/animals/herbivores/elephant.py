@@ -20,20 +20,31 @@ if TYPE_CHECKING:
 
 class Elephant(Herbivore):
     def __init__(self, position: Vector2):
+        # power 를 낮춰 '쫓아내는' 방어동물로(예전 28 은 포식자를 즉사시켰다).
         super().__init__(
-            "Elephant", position, (132, 132, 123), 165.0, 52.0, 28.0, 220.0
+            "Elephant", position, (132, 132, 123), 165.0, 52.0, 11.0, 150.0
         )
         self.radius = 28.0
 
     def fight_or_flight(
         self, threat: Animal, world: Optional["World"], dt: float
     ) -> None:
-        del dt  # 코끼리는 항상 돌진 — dt 불필요
-        if world is not None:
+        del dt
+        if world is None:
+            return
+        # 포식자가 '바짝' 붙었을 때만 stomp — 맵 끝까지 쫓아가지 않는다.
+        if self.distance_to(threat) <= self.radius + threat.radius + 24:
             self.stomp(threat, world)
+        else:
+            self.stop()                 # 가까이 오기 전엔 버티기만(추격 안 함)
+            self.action_text = "guard"
 
     def stomp(self, target: Animal, world: "World") -> None:
-        """포식자를 향해 돌진하며 공격해 쫓아낸다."""
-        self.move_toward(target.position, self.speed * 1.2)
+        """가까운 포식자를 공격하고 넉백으로 '밀어내 쫓아낸다'(죽이기보다 격퇴)."""
         self.attack(target, world)
+        away = target.position - self.position
+        if away.length_squared() > 1e-6:
+            push = away.normalize()
+            target.position = target.position + push * 20.0     # 밀쳐냄
+            target.velocity = push * target.speed               # 밀려나는 방향 속도
         self.action_text = "stomp"

@@ -21,7 +21,7 @@ _BASE_DIR = Path(__file__).resolve().parent.parent
 _SPRITE_DIR = _BASE_DIR / MOB_SPRITE_DIR
 
 _originals: dict[str, pygame.Surface | None] = {}   # name → 원본(또는 None=파일없음)
-_scaled: dict[tuple[str, int], pygame.Surface] = {}  # (name, 크기) → 줄인 그림
+_scaled: dict[tuple[str, int], pygame.Surface] = {}  # (name, 긴변) → 줄인 그림
 
 
 def _load_original(name: str) -> pygame.Surface | None:
@@ -40,8 +40,9 @@ def _load_original(name: str) -> pygame.Surface | None:
 
 
 def get_sprite(name: str, size: int) -> pygame.Surface | None:
-    """name 개체를 한 변 size(px) 정사각형으로 맞춘 그림을 돌려준다.
-    파일이 없으면 None → 호출한 쪽이 도형으로 그리면 된다."""
+    """name 개체의 '긴 변'이 size(px) 가 되도록 가로세로 비율을 유지해 줄인 그림.
+    (정사각형으로 안 늘려서 독수리 날개·아카시아 가지처럼 옆으로 긴 그림도 안 찌그러짐)
+    파일이 없으면 None → 호출한 쪽이 대체 표시를 하면 된다."""
     size = max(1, int(size))
     key = (name, size)
     cached = _scaled.get(key)
@@ -50,12 +51,36 @@ def get_sprite(name: str, size: int) -> pygame.Surface | None:
     original = _load_original(name)
     if original is None:
         return None
-    scaled = pygame.transform.smoothscale(original, (size, size))
+    w, h = original.get_size()
+    longest = max(w, h)
+    scale = size / longest
+    target = (max(1, round(w * scale)), max(1, round(h * scale)))
+    scaled = pygame.transform.smoothscale(original, target)
     _scaled[key] = scaled
     return scaled
+
+
+_background: list = []   # [Surface] 또는 [None] 한 번만 로드해 캐시
+
+
+def get_background():
+    """초원 배경 타일 텍스처를 돌려준다(assets/sprites/background.png).
+    파일이 없으면 None → gui 가 단색 초록 배경만 쓴다. 한 번만 디스크에서 읽는다."""
+    if _background:
+        return _background[0]
+    path = _BASE_DIR / "assets" / "sprites" / "background.png"
+    surface = None
+    if path.exists():
+        try:
+            surface = pygame.image.load(str(path)).convert_alpha()
+        except pygame.error:
+            surface = None
+    _background.append(surface)
+    return surface
 
 
 def clear_cache() -> None:
     """런타임 중 이미지를 새로 넣고 다시 읽고 싶을 때 캐시를 비운다."""
     _originals.clear()
     _scaled.clear()
+    _background.clear()

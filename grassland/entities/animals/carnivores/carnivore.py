@@ -28,6 +28,12 @@ class Carnivore(Animal):
             self.wander(dt)
 
     def behave(self, world, dt):
+        # 코끼리는 위험 — 가까이 있으면 사냥·음수보다 먼저 물러난다(stomp 회피).
+        elephant = world.nearest_named("Elephant", self.position, 120.0)
+        if elephant is not None and self.distance_to(elephant) < 120.0:
+            self.move_away_from(elephant.position, self.speed)
+            self.action_text = "avoid"
+            return True
         if self.seek_water_if_needed(world):
             return True
         if self.hunger > 45.0:

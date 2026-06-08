@@ -10,8 +10,10 @@ MIN_SCREEN_WIDTH = 900
 MIN_SCREEN_HEIGHT = 600
 
 # ── 월드(맵) ─────────────────────────────────────────────
-WORLD_WIDTH = 2400
-WORLD_HEIGHT = 1600
+# 세로 고정·가로 스크롤. 배경 그림의 '지평선'(초록 풀밭이 시작하는 지점, 화면 위에서
+# HORIZON_Y px) 아래가 동물이 다닐 수 있는 땅이다. WORLD_HEIGHT = 720 - HORIZON_Y.
+WORLD_WIDTH = 3800
+WORLD_HEIGHT = 390   # 720 - HORIZON_Y(330)
 
 # ── 시간 ────────────────────────────────────────────────
 FPS = 60
@@ -20,9 +22,9 @@ DAY_LENGTH_HOURS = 24
 
 # ── 초기 동물 수 (seed) ──────────────────────────────────
 SEED_COUNTS = {
-    "Lion": 2, "Hyena": 3, "Bald_Eagle": 2,
-    "Zebra": 6, "Gazelle": 6, "Elephant": 2,
-    "Meerkat": 5, "Warthog": 4,
+    "Lion": 4, "Hyena": 6, "Bald_Eagle": 4,
+    "Zebra": 12, "Gazelle": 12, "Elephant": 4,
+    "Meerkat": 10, "Warthog": 8,
 }
 
 # ── 색상 (R,G,B) ────────────────────────────────────────
@@ -40,19 +42,31 @@ WEATHER_TINT = {
     "drought": (232, 150, 60,  74),
 }
 
-ASSET_SPRITE_SHEET = "assets/sprites/environment_resource_terrain_sheet.png"
-
 # ── 개체별 이미지(스프라이트) 폴더 ───────────────────────────────
 # 각 동물·식물·자원·지형의 PNG 를 여기에 두면 gui 가 자동으로 불러 그린다.
 # 파일 이름 규칙: 개체 name 을 소문자로 (예: Lion→lion.png, Bald_Eagle→bald_eagle.png)
-# 이미지가 없으면 기존처럼 도형으로 그린다(폴백).
+# 이미지가 없으면 자주색 점으로 표시한다(폴백).
+# 지평선 높이(px): 화면 위에서 이만큼 아래가 '땅'(초록 풀밭)이고, 그 위는 '하늘'.
+# 배경 그림의 풀밭이 시작하는 높이에 맞춘다(이 그림은 약 46% → 720*0.46 ≈ 330).
+# 동물은 이 선(HORIZON_Y) 위로 올라가지 못한다. (코드 곳곳에서 field_top 으로 쓰임)
+HORIZON_Y = 330
+SKY_BAND_HEIGHT = HORIZON_Y   # 하늘 영역(해·달·구름) 높이 = 지평선까지
+
 MOB_SPRITE_DIR = "assets/sprites/mobs"
 
-# 표시 배율: 충돌 반지름(radius) 대비 스프라이트를 얼마나 크게 그릴지(종류별).
-# florr.io mob 처럼 약간 큼직하게 보이도록 1보다 크게 둔다.
-SPRITE_VISUAL_SCALE = {
-    "animal": 2.4,
-    "plant": 2.2,
-    "resource": 2.3,
-    "terrain": 2.0,
+# 개체별 화면 표시 크기(월드 px, 스프라이트의 '긴 변' 기준).
+# 충돌용 radius 와 분리해, 코끼리·바오밥은 크게 미어캣·풀은 작게 — 현실적인 크기비를
+# 게임이 직접 보장한다. 이미지는 정사각형으로 만들어도 되고, 가로세로 비율은 보존된다.
+#  (대략적인 실제 크기를 게임에서 보기 좋게 압축한 값. 숫자만 바꾸면 크기 조절됨)
+SPRITE_DISPLAY_SIZE = {
+    # ── 동물 ──
+    "Meerkat": 38, "Warthog": 58, "Gazelle": 60, "Hyena": 64,
+    "Zebra": 70, "Bald_Eagle": 66, "Lion": 84, "Elephant": 120,
+    # ── 식물 ──
+    "Grass": 44, "Bush": 76, "Acacia_Tree": 160, "Baobab_Tree": 175,
+    # ── 자원 ──
+    "Water_Puddle": 90, "Carcass": 54,
+    # ── 지형 ──
+    "Lake_Side": 230, "Cave": 130,
 }
+SPRITE_DISPLAY_DEFAULT = 70   # 표에 없는 개체의 기본 표시 크기

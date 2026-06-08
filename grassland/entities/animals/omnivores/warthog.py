@@ -13,7 +13,7 @@ class Warthog(Omnivore):
                          detect_range=165.0, radius=18.0)
         self.diet_preference = 0.35
         self.aggression = 0.35
-        self.tusk_power = 20.0
+        self.tusk_power = 11.0   # 엄니 반격 하향(포식자 즉사 방지)
         self.burrow_location = None
 
     def dig(self, world):

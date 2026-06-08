@@ -17,11 +17,15 @@ from __future__ import annotations
 
 import math
 
+from pygame.math import Vector2
+
 
 class PhysicsEngine:
     def __init__(self, width: float, height: float) -> None:
         self.width = width
         self.height = height
+        # 동물이 지평선 바로 아래까지만 오도록 위쪽에 두는 여유(월드 y 최소값).
+        self.top_margin = 14
 
     def update(self, entities, dt: float) -> None:
         """살아있는 entity 들의 충돌 분리 후, steering 으로 한 프레임 전진."""
@@ -41,6 +45,8 @@ class PhysicsEngine:
         entity.position = entity.position + entity.velocity * dt
         r = entity.radius
         x, y = entity.position.x, entity.position.y
+        # 위쪽 경계: 동물이 지평선(하늘) 위로 올라가지 않도록 살짝 여유(top_margin)를 둔다.
+        top = max(r, self.top_margin)
         # 맵 경계: 부딪치면 살짝 튕기고, 랜덤워크 heading 도 안쪽으로 반사한다.
         if x < r:
             x, entity.velocity.x = r, abs(entity.velocity.x) * 0.3
@@ -48,8 +54,8 @@ class PhysicsEngine:
         elif x > self.width - r:
             x, entity.velocity.x = self.width - r, -abs(entity.velocity.x) * 0.3
             self._reflect_heading(entity, axis="x")
-        if y < r:
-            y, entity.velocity.y = r, abs(entity.velocity.y) * 0.3
+        if y < top:
+            y, entity.velocity.y = top, abs(entity.velocity.y) * 0.3
             self._reflect_heading(entity, axis="y")
         elif y > self.height - r:
             y, entity.velocity.y = self.height - r, -abs(entity.velocity.y) * 0.3
@@ -83,6 +89,25 @@ class PhysicsEngine:
                 push = delta.normalize() * ((min_distance - distance) * 0.5)
                 first.position = first.position - push
                 second.position = second.position + push
+
+    def resolve_obstacles(self, animals, obstacles) -> None:
+        """나무·물가를 '벽'처럼 처리. 동물이 장애물 원 안에 들어오면 가장자리로 밀어내고,
+        안쪽으로 향하던 속도 성분을 없애 벽을 따라 미끄러지게 한다."""
+        for animal in animals:
+            for pos, block_r in obstacles:
+                delta = animal.position - pos
+                dist = delta.length()
+                min_dist = animal.radius + block_r
+                if dist >= min_dist:
+                    continue
+                if dist <= 1e-6:                       # 정확히 중심에 겹친 경우
+                    animal.position = pos + Vector2(min_dist, 0)
+                    continue
+                normal = delta / dist
+                animal.position = pos + normal * min_dist   # 가장자리로 밀어냄
+                inward = animal.velocity.dot(normal)
+                if inward < 0:                          # 벽으로 파고드는 속도 제거(미끄러짐)
+                    animal.velocity = animal.velocity - normal * inward
 
     def apply_terrain_effects(self, entities, terrains) -> None:
         """entity 가 Terrain 원 안이면 그 지형 효과를 발동(예: 호숫가=갈증↓, 동굴=은신)."""
