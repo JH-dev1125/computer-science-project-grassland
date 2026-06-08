@@ -10,7 +10,7 @@ from grassland.entities.animals.carnivores.carnivore import Carnivore
 class BaldEagle(Carnivore):
     def __init__(self, position):
         super().__init__("Bald_Eagle", position, (92, 82, 63),
-                         health=58.0, speed=104.0, power=10.0, detect_range=260.0)
+                         health=58.0, speed=104.0, power=10.0, detect_range=180.0)
         self.radius = 14.0
         self.is_flying = False
         self.fly_speed = 150.0

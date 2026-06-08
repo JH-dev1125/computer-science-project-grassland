@@ -8,10 +8,10 @@ class LakeSide(Terrain):
 
     def give_effect(self, entity):
         if hasattr(entity, "thirst"):
-            entity.thirst = max(0.0, entity.thirst - 18.0)
+            entity.thirst = 0.0
 
     def reduce_thirst(self, animal):
-        animal.thirst = max(0.0, animal.thirst - 18.0)
+        animal.thirst = 0.0
 
     def enable_drinking(self, animal):
         self.reduce_thirst(animal)

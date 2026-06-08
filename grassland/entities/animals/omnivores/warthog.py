@@ -10,7 +10,7 @@ class Warthog(Omnivore):
     def __init__(self, position):
         super().__init__("Warthog", position, (121, 95, 70),
                          health=72.0, speed=68.0, power=12.0,
-                         detect_range=165.0, radius=18.0)
+                         detect_range=115.0, radius=18.0)
         self.diet_preference = 0.35
         self.aggression = 0.35
         self.tusk_power = 11.0   # 엄니 반격 하향(포식자 즉사 방지)

@@ -22,9 +22,17 @@ class Elephant(Herbivore):
     def __init__(self, position: Vector2):
         # power 를 낮춰 '쫓아내는' 방어동물로(예전 28 은 포식자를 즉사시켰다).
         super().__init__(
-            "Elephant", position, (132, 132, 123), 165.0, 52.0, 11.0, 150.0
+            "Elephant", position, (132, 132, 123), 165.0, 34.0, 11.0, 150.0
         )
         self.radius = 28.0
+
+    @property
+    def is_hidden(self):
+        return False
+
+    @is_hidden.setter
+    def is_hidden(self, value):
+        pass
 
     def fight_or_flight(
         self, threat: Animal, world: Optional["World"], dt: float

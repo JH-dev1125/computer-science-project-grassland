@@ -9,7 +9,7 @@ from grassland.entities.resources.carcass import Carcass
 
 class Carnivore(Animal):
     def __init__(self, name, position, color,
-                 health=100.0, speed=78.0, power=18.0, detect_range=230.0):
+                 health=100.0, speed=78.0, power=18.0, detect_range=160.0):
         super().__init__(name, position, color, health, speed, power,
                          detect_range, radius=20)
         self.diet_type = "carnivore"
@@ -21,8 +21,8 @@ class Carnivore(Animal):
         if not self.alive:
             return
         self.age += dt
-        self.hunger = min(100.0, self.hunger + 3.0 * dt)
-        self.thirst = min(100.0, self.thirst + 2.4 * dt)
+        self.hunger = min(100.0, self.hunger + 1.5 * dt)
+        self.thirst = min(100.0, self.thirst + 1.4 * dt)
         self.recover_stamina(dt)
         if not self.behave(world, dt):
             self.wander(dt)
@@ -65,6 +65,7 @@ class Carnivore(Animal):
         if self.stamina <= 8.0:               # 지치면 추격 포기·휴식
             self.rest()
             return
+        self.interaction_target = prey
         if self.distance_to(prey) <= self.radius + prey.radius + 8:
             self.attack(prey, world)
         else:

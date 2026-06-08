@@ -13,7 +13,7 @@ from grassland.entities.animals.herbivores.herbivore import Herbivore
 class Gazelle(Herbivore):
     def __init__(self, position):
         super().__init__("Gazelle", position, (205, 166, 96),
-                         health=52.0, speed=96.0, power=5.0, detect_range=205.0)
+                         health=52.0, speed=96.0, power=5.0, detect_range=140.0)
         self.endurance = 0.6      # 높을수록 도주 중 스태미나 소모↓
         self.zigzag_angle = 52.0  # 방향 전환 각도(도) — Vector2.rotate 는 '도' 단위
         self.agility = 9.0        # 가젤은 민첩 → 지그재그가 빠르게 반영된다

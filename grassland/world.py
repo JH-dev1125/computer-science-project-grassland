@@ -189,6 +189,8 @@ class World:
         for plant in self.plants:
             plant.update(self, dt)
         for animal in self.animals:
+            animal.is_hidden = False
+            animal.interaction_target = None
             animal.update(self, dt)
         # 4) 물리: 충돌 분리 + 이동 + 맵 경계, 그리고 지형 효과
         living = self.living_animals()

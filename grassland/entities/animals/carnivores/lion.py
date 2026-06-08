@@ -8,7 +8,7 @@ from grassland.entities.animals.carnivores.carnivore import Carnivore
 class Lion(Carnivore):
     def __init__(self, position):
         super().__init__("Lion", position, (207, 157, 74),
-                         health=120.0, speed=82.0, power=22.0, detect_range=245.0)
+                         health=120.0, speed=82.0, power=22.0, detect_range=170.0)
         self.hunt_stamina_cost = 12.0
         self.mane_size = 1.0      # 클수록 couple 확률↑ (계획서)
         self.mane_exist = True

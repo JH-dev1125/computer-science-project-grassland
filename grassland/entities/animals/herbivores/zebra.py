@@ -9,7 +9,7 @@ from grassland.entities.animals.herbivores.herbivore import Herbivore
 class Zebra(Herbivore):
     def __init__(self, position):
         super().__init__("Zebra", position, (232, 232, 218),
-                         health=78.0, speed=86.0, power=7.0, detect_range=185.0)
+                         health=78.0, speed=86.0, power=7.0, detect_range=130.0)
         self.kick_power = 9.0      # 뒷발차기(반격이 포식자를 즉사시키지 않게 하향)
         self.alert_radius = 220.0  # 경고 전파 반경
 

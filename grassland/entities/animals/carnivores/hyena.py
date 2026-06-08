@@ -10,7 +10,7 @@ from grassland.entities.resources.carcass import Carcass
 class Hyena(Carnivore):
     def __init__(self, position):
         super().__init__("Hyena", position, (156, 126, 82),
-                         health=86.0, speed=76.0, power=15.0, detect_range=215.0)
+                         health=86.0, speed=76.0, power=15.0, detect_range=150.0)
         self.steal_prey_chance = 0.4    # 탈취 확률(health 높을수록 ↑)
         self.stolen_prey = None         # 가로챈 Carcass
 

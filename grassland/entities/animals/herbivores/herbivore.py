@@ -16,7 +16,7 @@ class Herbivore(Animal):
         health: float,
         speed: float,
         power: float,
-        detect_range: float = 160.0,
+        detect_range: float = 110.0,
     ):
         super().__init__(name, position, color, health, speed, power, detect_range)
         self.role = "herbivore"
@@ -27,13 +27,15 @@ class Herbivore(Animal):
         self.is_chased = False
         self.panic_boost_timer = 0.0
         self.reproduce_cooldown = 0.0
+        self.flee_timer = 0.0
+        self._last_threat_pos = None
 
     def update(self, world: "World", dt: float) -> None:
         if not self.alive:
             return
         self.age += dt
-        self.hunger = min(100.0, self.hunger + 2.4 * dt)
-        self.thirst = min(100.0, self.thirst + 2.1 * dt)
+        self.hunger = min(100.0, self.hunger + 1.2 * dt)
+        self.thirst = min(100.0, self.thirst + 1.2 * dt)
         self.recover_stamina(dt)
         if self.panic_boost_timer > 0:
             self.panic_boost_timer = max(0.0, self.panic_boost_timer - dt)
@@ -53,19 +55,28 @@ class Herbivore(Animal):
 
     def behave(self, world: "World", dt: float) -> bool:
         threat = world.nearest_predator(self, self.panic_range)
-        if threat is not None and not self.is_chased:
-            self.panic_boost_timer = 4.0
-        self.is_chased = threat is not None
+        if threat is not None:
+            self._last_threat_pos = threat.position.copy()
+            self.flee_timer = 2.5
+            if not self.is_chased:
+                self.panic_boost_timer = 4.0
+        self.flee_timer = max(0.0, self.flee_timer - dt)
+        self.is_chased = self.flee_timer > 0.0
         if self.is_chased:
             self.stress = min(100.0, self.stress + 15.0 * dt)
-        if threat is not None:
-            bush = world.nearest_bush(self.position, 95.0)
-            if bush is not None and self.can_hide_in_bush():
-                self.move_toward(bush.position, self.flee_speed)
-                if self.position.distance_to(bush.position) < bush.radius + self.radius:
-                    bush.hide_entity(self)
-                return True
-            self.fight_or_flight(threat, world, dt)
+            if threat is not None:
+                self.interaction_target = threat
+                bush = world.nearest_bush(self.position, 95.0)
+                if bush is not None and self.can_hide_in_bush():
+                    self.move_toward(bush.position, self.flee_speed)
+                    if self.position.distance_to(bush.position) < bush.radius + self.radius:
+                        bush.hide_entity(self)
+                    return True
+                self.fight_or_flight(threat, world, dt)
+            else:
+                self.interaction_target = None
+                self.move_away_from(self._last_threat_pos, self.flee_speed)
+                self.action_text = "flee"
             return True
         return self.seek_water_if_needed(world) or self.seek_plants_if_needed(world)
 

@@ -9,8 +9,8 @@ class WaterPuddle(Resource):
                          color=(65, 145, 208), radius=28)
 
     def reduce_thirst(self, animal):
-        taken = self.consume(18)
-        animal.thirst = max(0.0, animal.thirst - taken)
+        self.consume(18)
+        animal.thirst = 0.0
 
     def enable_drinking(self, animal):
         self.reduce_thirst(animal)

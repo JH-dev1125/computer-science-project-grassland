@@ -11,7 +11,7 @@ class Meerkat(Omnivore):
     def __init__(self, position):
         super().__init__("Meerkat", position, (198, 157, 93),
                          health=42.0, speed=82.0, power=5.0,
-                         detect_range=185.0, radius=13.0)
+                         detect_range=130.0, radius=13.0)
         self.diet_preference = 0.25
         self.aggression = 0.08
         self.is_sentinel = False

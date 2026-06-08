@@ -11,7 +11,7 @@ from grassland.entities.resources.carcass import Carcass
 
 class Omnivore(Animal):
     def __init__(self, name, position, color, health, speed, power,
-                 detect_range=150.0, radius=17.0):
+                 detect_range=105.0, radius=17.0):
         super().__init__(name, position, color, health, speed, power,
                          detect_range, radius=radius)
         self.diet_type = "omnivore"
@@ -23,8 +23,8 @@ class Omnivore(Animal):
         if not self.alive:
             return
         self.age += dt
-        self.hunger = min(100.0, self.hunger + 2.6 * dt)
-        self.thirst = min(100.0, self.thirst + 2.2 * dt)
+        self.hunger = min(100.0, self.hunger + 1.3 * dt)
+        self.thirst = min(100.0, self.thirst + 1.3 * dt)
         self.recover_stamina(dt)
         if not self.behave(world, dt):
             self.wander(dt)

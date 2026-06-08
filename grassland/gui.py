@@ -56,6 +56,7 @@ class GrasslandApp:
         running = True
         while running:
             dt = self.clock.tick(FPS) / 1000.0
+            self.dt = dt
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -224,10 +225,18 @@ class GrasslandApp:
         for e in upright:
             x, y = self.world_to_screen(e.position)
             if e.kind == "animal":
-                if e.velocity.x > 6:
-                    e.facing_left = False
-                elif e.velocity.x < -6:
-                    e.facing_left = True
+                dt = getattr(self, 'dt', 0.0)
+                if not hasattr(e, '_flip_cooldown'):
+                    e._flip_cooldown = 0.0
+                e._flip_cooldown = max(0.0, e._flip_cooldown - dt)
+                dvx = e.desired_velocity.x
+                if e._flip_cooldown <= 0.0:
+                    if dvx > 8:
+                        e.facing_left = False
+                        e._flip_cooldown = 0.4
+                    elif dvx < -8:
+                        e.facing_left = True
+                        e._flip_cooldown = 0.4
                 rect = self.blit_sprite(e, x, y, flip=not getattr(e, "facing_left", True),
                                         anchor="bottom")
                 self.health_bar(e, x, rect.top - 6, self.display_size(e))
@@ -238,6 +247,43 @@ class GrasslandApp:
                     pygame.draw.ellipse(self.screen, (255, 230, 90), ring, 3)
             else:
                 self.blit_sprite(e, x, y, anchor="bottom")
+
+        # 3) 상호작용 선: 행동 중인 동물과 대상 사이를 연결
+        self._draw_interaction_lines()
+
+    _INTERACTION_COLORS = {
+        "attack": (220, 50,  50),
+        "hunt":   (220, 50,  50),
+        "fight":  (220, 50,  50),
+        "kick":   (220, 50,  50),
+        "stomp":  (220, 50,  50),
+        "yacha":  (220, 50,  50),
+        "steal":  (220, 130, 50),
+        "eat":         (80, 200, 80),
+        "eat_carcass": (80, 200, 80),
+        "graze":       (80, 200, 80),
+        "drink": (80, 160, 220),
+        "water": (80, 160, 220),
+        "flee":    (240, 180, 50),
+        "zigzag":  (240, 180, 50),
+        "burrow":  (240, 180, 50),
+        "carcass": (180, 140, 220),
+    }
+
+    def _draw_interaction_lines(self):
+        for animal in self.world.animals:
+            if not animal.alive:
+                continue
+            target = getattr(animal, "interaction_target", None)
+            if target is None:
+                continue
+            if not getattr(target, "alive", True):
+                continue
+            ax, ay = self.world_to_screen(animal.position)
+            tx, ty = self.world_to_screen(target.position)
+            color = self._INTERACTION_COLORS.get(
+                getattr(animal, "action_text", ""), (200, 200, 200))
+            pygame.draw.line(self.screen, color, (ax, ay), (tx, ty), 2)
 
     def health_bar(self, animal, x, y, width):
         """동물 머리 위 체력바. 비율(0~1)에 따라 길이와 색이 바뀐다(초록→노랑→빨강)."""

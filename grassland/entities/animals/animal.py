@@ -43,19 +43,22 @@ class Animal(Entity):
         self.heading = random.uniform(0.0, 360.0)     # 현재 진행 방향(도)
         self.wander_timer = random.uniform(0.4, 2.0)   # 다음 '쉼/이동' 전환까지
         self.is_resting = False                        # 잠깐 멈춰 주변을 살피는 중
+        self.interaction_target = None                 # 이번 프레임 상호작용 대상
 
     # ── 계획서 공통 메서드 ───────────────────────────────────────────
     def eat(self, food):
         """food 는 consume(amount) 또는 reduce_hunger(self) 를 가진 객체(덕 타이핑)."""
+        self.interaction_target = food
         if hasattr(food, "reduce_hunger"):        # 사체 등
             food.reduce_hunger(self)
         elif hasattr(food, "consume"):            # 식물 등
-            eaten = food.consume(14)
+            eaten = food.consume(40)
             self.hunger = max(0.0, self.hunger - eaten)
         self.action_text = "eat"
 
     def drink(self, source):
         """source 는 reduce_thirst(self) 또는 enable_drinking(self) 를 가진 객체."""
+        self.interaction_target = source
         if hasattr(source, "reduce_thirst"):
             source.reduce_thirst(self)
         elif hasattr(source, "enable_drinking"):
@@ -94,6 +97,7 @@ class Animal(Entity):
         (매 프레임 데미지가 들어가 즉사하던 문제를 막는다 — 초당 ~1.4회만 타격)"""
         if not target.alive:
             return
+        self.interaction_target = target
         self.action_text = "attack"
         if self.attack_timer > 0.0:
             return
@@ -126,6 +130,7 @@ class Animal(Entity):
         water = world.nearest_water(self.position)
         if water is None:
             return False
+        self.interaction_target = water
         if self.distance_to(water) <= self.radius + water.radius + 8:
             self.drink(water)
             self.stop()
@@ -136,11 +141,12 @@ class Animal(Entity):
 
     def seek_plants_if_needed(self, world):
         """배고프면 가장 가까운 식물로 이동·섭취. 행동했으면 True."""
-        if self.hunger < 62.0:
+        if self.hunger < 35.0:
             return False
         plant = world.nearest_plant(self.position)
         if plant is None:
             return False
+        self.interaction_target = plant
         if self.distance_to(plant) <= self.radius + plant.radius + 8:
             self.eat(plant)
             self.stop()
@@ -156,8 +162,8 @@ class Animal(Entity):
         # 1) 가끔 '쉼 ↔ 이동' 상태를 바꾼다
         self.wander_timer -= dt
         if self.wander_timer <= 0.0:
-            self.is_resting = random.random() < 0.22
-            self.wander_timer = random.uniform(1.2, 3.2)
+            self.is_resting = random.random() < 0.12
+            self.wander_timer = random.uniform(0.6, 1.8)
 
         if self.is_resting:
             self.stop()
