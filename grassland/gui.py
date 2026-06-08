@@ -59,6 +59,11 @@ class GrasslandApp:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.KEYDOWN and self.world.environment.ended:
+                    if event.key in (pygame.K_y, pygame.K_RETURN):
+                        self._restart()
+                    elif event.key in (pygame.K_n, pygame.K_ESCAPE):
+                        running = False
                 elif event.type == pygame.VIDEORESIZE:
                     self.resize(event.w, event.h)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -77,10 +82,18 @@ class GrasslandApp:
                 elif event.type == pygame.MOUSEMOTION and self.dragging:
                     self.camera.x -= event.rel[0]   # 가로만 이동(세로 고정)
                     self.clamp_camera()
-            self.world.update(dt)
+            if not self.world.environment.ended:
+                self.world.update(dt)
             self.update_sky(dt)
             self.draw()
         pygame.quit()
+
+    def _restart(self):
+        from grassland.world import World
+        self.world = World.seed_default()
+        self.camera = Vector2(220, 0)
+        self.selected = None
+        self._init_sky()
 
     # ── 카메라 ───────────────────────────────────────────────────────────
     def clamp_camera(self):
@@ -541,13 +554,15 @@ class GrasslandApp:
             self.end_panel(env.end_reason)
 
     def end_panel(self, reason):
-        panel = pygame.Rect(0, 0, min(680, self.screen_width - 48), 110)
+        panel = pygame.Rect(0, 0, min(680, self.screen_width - 48), 150)
         panel.center = (self.screen_width // 2, self.screen_height // 2)
         pygame.draw.rect(self.screen, (245, 235, 211), panel, border_radius=8)
         pygame.draw.rect(self.screen, (92, 65, 50), panel, 3, border_radius=8)
-        self.label("Simulation Ended", panel.centerx, panel.centery - 22,
+        self.label("Simulation Ended", panel.centerx, panel.centery - 42,
                    self.title_font, (62, 45, 38))
-        self.label(reason, panel.centerx, panel.centery + 15, self.font, (62, 45, 38))
+        self.label(reason, panel.centerx, panel.centery - 5, self.font, (62, 45, 38))
+        self.label("다시 시작하겠습니까?  [Y] 예   [N] 아니오",
+                   panel.centerx, panel.centery + 38, self.font, (92, 65, 50))
 
     def label(self, text, x, y, font, color=TEXT_COLOR):
         surface = font.render(text, True, color)
