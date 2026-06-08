@@ -13,18 +13,18 @@ MIN_SCREEN_HEIGHT = 600
 # 세로 고정·가로 스크롤. 배경 그림의 '지평선'(초록 풀밭이 시작하는 지점, 화면 위에서
 # HORIZON_Y px) 아래가 동물이 다닐 수 있는 땅이다. WORLD_HEIGHT = 720 - HORIZON_Y.
 WORLD_WIDTH = 3800
-WORLD_HEIGHT = 390   # 720 - HORIZON_Y(330)
+WORLD_HEIGHT = 481   # 720 - HORIZON_Y(239) — 새 배경그림의 초원 시작선에 맞춤
 
 # ── 시간 ────────────────────────────────────────────────
 FPS = 60
-GAME_HOURS_PER_SECOND = 1   # 실제 1초 = 게임 0.25h → 하루(24h)=96초
+GAME_HOURS_PER_SECOND = 0.25   # 실제 1초 = 게임 0.25h → 하루(24h)=96초
 DAY_LENGTH_HOURS = 24
 
-# ── 초기 동물 수 (seed) ──────────────────────────────────
+# ── 초기 동물 수 (seed) ── 종류별 5~7마리로 제한 ───────────
 SEED_COUNTS = {
-    "Lion": 4, "Hyena": 6, "Bald_Eagle": 4,
-    "Zebra": 12, "Gazelle": 12, "Elephant": 4,
-    "Meerkat": 10, "Warthog": 8,
+    "Lion": 5, "Hyena": 6, "Bald_Eagle": 5,
+    "Zebra": 7, "Gazelle": 7, "Elephant": 5,
+    "Meerkat": 6, "Warthog": 6,
 }
 
 # ── 색상 (R,G,B) ────────────────────────────────────────
@@ -49,7 +49,7 @@ WEATHER_TINT = {
 # 지평선 높이(px): 화면 위에서 이만큼 아래가 '땅'(초록 풀밭)이고, 그 위는 '하늘'.
 # 배경 그림의 풀밭이 시작하는 높이에 맞춘다(이 그림은 약 46% → 720*0.46 ≈ 330).
 # 동물은 이 선(HORIZON_Y) 위로 올라가지 못한다. (코드 곳곳에서 field_top 으로 쓰임)
-HORIZON_Y = 330
+HORIZON_Y = 239
 SKY_BAND_HEIGHT = HORIZON_Y   # 하늘 영역(해·달·구름) 높이 = 지평선까지
 
 MOB_SPRITE_DIR = "assets/sprites/mobs"
@@ -59,14 +59,14 @@ MOB_SPRITE_DIR = "assets/sprites/mobs"
 # 게임이 직접 보장한다. 이미지는 정사각형으로 만들어도 되고, 가로세로 비율은 보존된다.
 #  (대략적인 실제 크기를 게임에서 보기 좋게 압축한 값. 숫자만 바꾸면 크기 조절됨)
 SPRITE_DISPLAY_SIZE = {
-    # ── 동물 ──
-    "Meerkat": 38, "Warthog": 58, "Gazelle": 60, "Hyena": 64,
-    "Zebra": 70, "Bald_Eagle": 66, "Lion": 84, "Elephant": 120,
-    # ── 식물 ──
-    "Grass": 44, "Bush": 76, "Acacia_Tree": 160, "Baobab_Tree": 175,
-    # ── 자원 ──
-    "Water_Puddle": 90, "Carcass": 54,
-    # ── 지형 ──
-    "Lake_Side": 230, "Cave": 130,
+    # ── 동물 ── (코끼리와 다른 동물의 크기차를 줄여 현실감과 가독성을 동시에 잡음)
+    "Meerkat": 44, "Warthog": 64, "Gazelle": 66, "Hyena": 70,
+    "Zebra": 76, "Bald_Eagle": 70, "Lion": 84, "Elephant": 104,
+    # ── 식물 ── (나무는 더 크게: 동물들의 쉼터·은신처 느낌을 살림)
+    "Grass": 56, "Bush": 84, "Acacia_Tree": 230, "Baobab_Tree": 260,
+    # ── 자원 ── (작은 물웅덩이도 더 크게)
+    "Water_Puddle": 120, "Carcass": 54,
+    # ── 지형 ── (동굴은 더 크게)
+    "Lake_Side": 230, "Cave": 170,
 }
 SPRITE_DISPLAY_DEFAULT = 70   # 표에 없는 개체의 기본 표시 크기

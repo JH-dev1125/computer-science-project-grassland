@@ -124,11 +124,20 @@ class World:
         return any(pos.distance_to(p) < rad for p, rad in self._occupied)
 
     def seed_grass(self):
-        """풀: 군락으로 빽빽이 흩뿌리되, 구조물(나무·물·동굴 등) 위에는 깔지 않는다."""
-        for _ in range(random.randint(16, 22)):
+        """풀: 대부분은 듬성듬성 한두 포기씩, 가끔 여러 포기가 모인 군집을 섞어 흩뿌린다.
+        (구조물 위에는 깔지 않는다.) 전체 개수는 예전보다 줄여 화면이 덜 빽빽하게."""
+        # 1) 듬성듬성 — 낱개(또는 1~2포기) 풀을 넓게 흩뿌린다
+        for _ in range(random.randint(14, 20)):
+            pos = self._clamp(self._random_spot(60), 40)
+            if self._on_structure(pos):
+                continue
+            self.plants.append(Grass(pos))
+
+        # 2) 군집 — 가끔(적은 수) 여러 포기가 모인 덩어리를 만든다
+        for _ in range(random.randint(4, 7)):
             center = self._random_spot(70)
-            for _ in range(random.randint(5, 9)):
-                offset = Vector2(random.uniform(-55, 55), random.uniform(-55, 55))
+            for _ in range(random.randint(4, 7)):
+                offset = Vector2(random.uniform(-50, 50), random.uniform(-50, 50))
                 pos = self._clamp(center + offset, 40)
                 if self._on_structure(pos):
                     continue
@@ -211,7 +220,7 @@ class World:
         """살아있는 풀이 씨앗을 퍼뜨려 가끔 주변에 새 풀이 자란다(계획서 spread_seeds).
         풀 공급이 끊겨 초원이 사막화되는 것을 막는다. 전체 풀 수는 상한으로 제한."""
         grasses = [p for p in self.plants if p.alive and p.name == "Grass"]
-        if len(grasses) >= 140:
+        if len(grasses) >= 95:
             return
         for grass in grasses:
             if random.random() < 0.02 * dt * 60:   # 프레임레이트에 무관하게

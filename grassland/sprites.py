@@ -79,8 +79,28 @@ def get_background():
     return surface
 
 
+_sky_images: dict = {}   # {파일이름(확장자 제외): Surface 또는 None} 한 번만 로드해 캐시
+
+
+def get_sky_image(name):
+    """하늘 이미지(구름·해·달)를 돌려준다(assets/sprites/<name>.png).
+    파일이 없으면 None → gui 가 절차적(원·후광) 그리기로 대체한다."""
+    if name in _sky_images:
+        return _sky_images[name]
+    path = _BASE_DIR / "assets" / "sprites" / f"{name}.png"
+    surface = None
+    if path.exists():
+        try:
+            surface = pygame.image.load(str(path)).convert_alpha()
+        except pygame.error:
+            surface = None
+    _sky_images[name] = surface
+    return surface
+
+
 def clear_cache() -> None:
     """런타임 중 이미지를 새로 넣고 다시 읽고 싶을 때 캐시를 비운다."""
     _originals.clear()
     _scaled.clear()
     _background.clear()
+    _sky_images.clear()
