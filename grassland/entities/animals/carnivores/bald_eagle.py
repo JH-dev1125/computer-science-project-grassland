@@ -52,8 +52,18 @@ class BaldEagle(Carnivore):
         self.action_text = "eat_carcass"
 
     def behave(self, world, dt):
-        # 사체를 지평선 주위(world y 가 작은 쪽)에서 발견했을 때만 내려앉아 먹는다.
-        # 그 밖의 모든 경우에는 fly() 가 기본 상태 — 상공 선회를 유지한다.
+        # 1순위: 즉각적 위협 — 사자·코끼리 회피 (안전이 먹이보다 우선)
+        lion = world.nearest_named("Lion", self.position, 110.0)
+        if lion is not None:
+            self.fly()
+            self.move_away_from(lion.position, self.fly_speed)
+            return True
+        elephant = world.nearest_named("Elephant", self.position, 110.0)
+        if elephant is not None:
+            self.fly()
+            self.move_away_from(elephant.position, self.fly_speed)
+            return True
+        # 2순위: 배고픔 — 위협 없을 때만 사체에 내려앉음
         if self.hunger > 40.0:
             carcass = world.nearest_carcass(self.position)
             if carcass is not None and carcass.position.y <= HORIZON_ZONE:
@@ -66,17 +76,7 @@ class BaldEagle(Carnivore):
                     self.move_toward(carcass.position, self.speed * 0.8)
                     self.action_text = "carcass"
                 return True
-        # 근처에 사자가 있으면 회피 비행
-        lion = world.nearest_named("Lion", self.position, 110.0)
-        if lion is not None:
-            self.fly()
-            self.move_away_from(lion.position, self.fly_speed)
-            return True
-        elephant = world.nearest_named("Elephant", self.position, 110.0)
-        if elephant is not None:
-            self.fly()
-            self.move_away_from(elephant.position, self.fly_speed)
-            return True
+        # 3순위: 기본 상태 — 상공 선회
         self.fly()
         return False
 

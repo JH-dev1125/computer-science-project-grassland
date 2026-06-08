@@ -22,23 +22,27 @@ class Carnivore(Animal):
             return
         self.age += dt
         self.hunger = min(100.0, self.hunger + 1.5 * dt)
-        self.thirst = min(100.0, self.thirst + 1.4 * dt)
+        self.thirst = min(100.0, self.thirst + 0.65 * dt)
         self.recover_stamina(dt)
         if not self.behave(world, dt):
             self.wander(dt)
 
+    def _elephant_near(self, world, pos, radius=90.0):
+        """pos 주변에 코끼리가 있으면 True — 접근 전 사전 확인용."""
+        return world.nearest_named("Elephant", pos, radius) is not None
+
     def behave(self, world, dt):
-        # 코끼리는 위험 — 가까이 있으면 사냥·음수보다 먼저 물러난다(stomp 회피).
-        elephant = world.nearest_named("Elephant", self.position, 120.0)
-        if elephant is not None and self.distance_to(elephant) < 120.0:
+        # 1순위: 즉각적 위협 — 코끼리 회피 (범위 확대로 선제 회피)
+        elephant = world.nearest_named("Elephant", self.position, 90.0)
+        if elephant is not None and self.distance_to(elephant) < 90.0:
             self.move_away_from(elephant.position, self.speed)
             self.action_text = "avoid"
             return True
-        if self.seek_water_if_needed(world):
-            return True
-        if self.hunger > 45.0:
-            carcass = world.nearest_carcass(self.position)        # 사체 우선
-            if carcass is not None:
+        # 2순위: 극도 굶주림 — 단, 목표 주변에 코끼리 없을 때만 접근
+        if self.hunger > 72.0:
+            carcass = world.nearest_carcass(self.position)
+            if carcass is not None and not self._elephant_near(world, carcass.position):
+                self.interaction_target = carcass
                 if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
                     self.eat(carcass)
                     self.stop()
@@ -46,8 +50,27 @@ class Carnivore(Animal):
                     self.move_toward(carcass.position, self.speed * 0.75)
                     self.action_text = "carcass"
                 return True
-            prey = self.find_prey(world)                          # 없으면 사냥
-            if prey is not None:
+            prey = self.find_prey(world)
+            if prey is not None and not self._elephant_near(world, prey.position):
+                self.hunt(prey, world, dt)
+                return True
+        # 3순위: 갈증 해소
+        if self.seek_water_if_needed(world):
+            return True
+        # 4순위: 일반 배고픔 — 코끼리 없는 목표만
+        if self.hunger > 45.0:
+            carcass = world.nearest_carcass(self.position)
+            if carcass is not None and not self._elephant_near(world, carcass.position):
+                self.interaction_target = carcass
+                if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
+                    self.eat(carcass)
+                    self.stop()
+                else:
+                    self.move_toward(carcass.position, self.speed * 0.75)
+                    self.action_text = "carcass"
+                return True
+            prey = self.find_prey(world)
+            if prey is not None and not self._elephant_near(world, prey.position):
                 self.hunt(prey, world, dt)
                 return True
         return False

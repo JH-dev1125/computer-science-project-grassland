@@ -18,32 +18,38 @@ class Lion(Carnivore):
 
     def behave(self, world, dt):
         import random as _r
-        if not self.is_sleeping and self.stamina > 30.0 and _r.random() < 0.004:
-            self.roar(world)
-            return True
-
-        # 코끼리 감지 시 avoid 타이머 설정 — 타이머 동안은 다른 행동 불가
-        elephant = world.nearest_named("Elephant", self.position, 120.0)
-        if elephant is not None and self.distance_to(elephant) < 120.0:
+        # 1순위: 즉각적 위협 — 코끼리 회피 (범위 확대 + 타이머)
+        elephant = world.nearest_named("Elephant", self.position, 90.0)
+        if elephant is not None and self.distance_to(elephant) < 90.0:
             self._avoid_timer = 3.5
             self._last_elephant_pos = elephant.position.copy()
-
         self._avoid_timer = max(0.0, self._avoid_timer - dt)
         if self._avoid_timer > 0.0:
             if self._last_elephant_pos is not None:
                 self.move_away_from(self._last_elephant_pos, self.speed)
             self.action_text = "avoid"
             return True
-
+        # 2순위: 극도 굶주림 — 목표 근처에 코끼리 없을 때만 접근
+        if self.hunger > 72.0:
+            prey = self.find_prey(world)
+            if prey is not None and not self._elephant_near(world, prey.position):
+                self.hunt(prey, world, dt)
+                return True
+        # 3순위: 갈증 해소
         if self.seek_water_if_needed(world):
             return True
+        # 4순위: 포효 (안전하고 체력 충분할 때 가끔)
+        if self.stamina > 30.0 and _r.random() < 0.004:
+            self.roar(world)
+            return True
+        # 5순위: 일반 배고픔 — 코끼리 없는 먹이만
         if self.hunger > 38.0:
             prey = self.find_prey(world)
-            if prey is not None:
+            if prey is not None and not self._elephant_near(world, prey.position):
                 self.hunt(prey, world, dt)
                 return True
             carcass = world.nearest_carcass(self.position)
-            if carcass is not None:
+            if carcass is not None and not self._elephant_near(world, carcass.position):
                 self.interaction_target = carcass
                 if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
                     self.eat(carcass)

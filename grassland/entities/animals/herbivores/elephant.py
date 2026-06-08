@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import random
 from typing import Optional, TYPE_CHECKING
 
 from grassland.entities.animals.animal import Animal
@@ -49,13 +50,31 @@ class Elephant(Herbivore):
 
     def stomp(self, target: Animal, world: "World") -> None:
         """가까운 포식자를 공격하고 넉백+공중 바운스로 쫓아낸다."""
-        self.attack(target, world)
+        # 10% 확률로 강타 — 40 데미지 직접 적용
+        if random.random() < 0.10:
+            if target.alive:
+                target.health -= 40
+                target.stress = min(100.0, target.stress + 20.0)
+                if target.health <= 0:
+                    target.die(world)
+        else:
+            self.attack(target, world)
+
+        # 코끼리 자신도 살짝 뛴다
+        self._bounce_timer = 0.3
+        self._bounce_duration = 0.3
+        self._bounce_height = 18.0
+
+        if not target.alive:
+            self.action_text = "stomp"
+            return
+
+        # 대상 넉백 + 공중 바운스
         away = target.position - self.position
         if away.length_squared() > 1e-6:
             push = away.normalize()
             target.position = target.position + push * 25.0
             target.velocity = push * target.speed * 1.4
-        # 공중 바운스: gui 가 y 오프셋으로 아크를 표현
         target._bounce_timer = 0.55
         target._bounce_duration = 0.55
         target._bounce_height = 48.0

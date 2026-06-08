@@ -35,7 +35,7 @@ class Herbivore(Animal):
             return
         self.age += dt
         self.hunger = min(100.0, self.hunger + 1.2 * dt)
-        self.thirst = min(100.0, self.thirst + 1.2 * dt)
+        self.thirst = min(100.0, self.thirst + 0.55 * dt)
         self.recover_stamina(dt)
         if self.panic_boost_timer > 0:
             self.panic_boost_timer = max(0.0, self.panic_boost_timer - dt)
