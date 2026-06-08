@@ -16,6 +16,10 @@ class Terrain(Entity):
         """entity 가 이 지형 원 안에 있는가."""
         return self.distance_to(entity) <= self.size
 
+    def can_enter(self, entity):
+        """이 지형에 들어올 수 있는 entity 인가(자식이 오버라이드)."""
+        return True
+
     def give_effect(self, entity):
         """원 안 entity 에 줄 효과(자식이 오버라이드)."""
         return None

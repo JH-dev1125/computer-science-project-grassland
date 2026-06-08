@@ -110,14 +110,25 @@ class PhysicsEngine:
                     animal.velocity = animal.velocity - normal * inward
 
     def apply_terrain_effects(self, entities, terrains) -> None:
-        """entity 가 Terrain 원 안이면 그 지형 효과를 발동(예: 호숫가=갈증↓, 동굴=은신)."""
+        """entity 가 Terrain 원 안이면 그 지형 효과를 발동(예: 호숫가=갈증↓, 동굴=은신).
+        can_enter()가 False인 지형은 벽처럼 entity를 밖으로 밀어낸다."""
         for entity in entities:
             if not entity.alive:
                 continue
             for terrain in terrains:
                 if terrain.name == "Plain":
                     continue
-                if terrain.contains(entity):
+                if not terrain.contains(entity):
+                    continue
+                if not terrain.can_enter(entity):
+                    delta = entity.position - terrain.position
+                    dist = delta.length()
+                    push_dist = terrain.size + entity.radius
+                    if dist <= 1e-6:
+                        entity.position = terrain.position + Vector2(push_dist, 0)
+                    else:
+                        entity.position = terrain.position + delta.normalize() * push_dist
+                else:
                     terrain.give_effect(entity)
 
     def neighbors(self, center, radius: float, entities):

@@ -4,6 +4,7 @@
 # 고유 메서드: stand()(보초 서기), eat_grass()
 # 위협 시 동굴(Cave)로 숨는다.
 # =============================================================================
+from grassland.config import MEERKAT_HOME_RADIUS
 from grassland.entities.animals.omnivores.omnivore import Omnivore
 
 
@@ -43,6 +44,14 @@ class Meerkat(Omnivore):
                 self.lose_energy(5.0 * dt)
                 return True
             self.flee_or_fight(threat, world, dt)
+            return True
+
+        # 굴에서 너무 멀어지면 복귀
+        cave = world.nearest_terrain_type("Cave", self.position)
+        if cave is not None and self.distance_to(cave) > MEERKAT_HOME_RADIUS:
+            self.move_toward(cave.position, self.speed)
+            self.action_text = "return"
+            self.lose_energy(4.0 * dt)
             return True
 
         # 안전하고 배부르면 보초 서기

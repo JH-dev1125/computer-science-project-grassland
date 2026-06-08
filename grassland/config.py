@@ -21,6 +21,8 @@ GAME_HOURS_PER_SECOND = 0.25   # 실제 1초 = 게임 0.25h → 하루(24h)=96�
 DAY_LENGTH_HOURS = 24
 
 # ── 초기 동물 수 (seed) ── 종류별 5~7마리로 제한 ───────────
+MEERKAT_HOME_RADIUS = 260   # 미어캣이 굴 중심으로부터 벗어날 수 있는 최대 거리
+
 SEED_COUNTS = {
     "Lion": 5, "Hyena": 6, "Bald_Eagle": 5,
     "Zebra": 7, "Gazelle": 7, "Elephant": 5,
