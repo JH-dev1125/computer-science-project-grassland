@@ -40,13 +40,13 @@ class GrasslandApp:
         self._press_pos = None       # 클릭 vs 드래그 구분용(눌렀을 때 화면 좌표)
         self.selected = None         # 클릭으로 선택된 몹(없으면 None)
         self.font = self._font(17)
-        self.small_font = self._font(13)
-        self.title_font = self._font(22)
+        self.small_font = self._font(14)
+        self.title_font = self._font(22, bold=True)
         self._init_sky()
 
-    def _font(self, size):
-        for name in ("malgungothic", "맑은 고딕", "arial"):
-            font = pygame.font.SysFont(name, size)
+    def _font(self, size, bold=False):
+        for name in ("malgungothic", "malgun gothic", "nanumgothic", "segoeui", "arial"):
+            font = pygame.font.SysFont(name, size, bold=bold)
             if font is not None:
                 return font
         return pygame.font.Font(None, size)
@@ -573,34 +573,44 @@ class GrasslandApp:
 
     def draw_ui(self):
         # 정보 패널을 '좌하단'에 둔다(상단은 하늘 띠가 차지하므로).
-        ph = 92
+        ph = 118
         panel = pygame.Rect(16, self.screen_height - ph - 14,
-                            min(700, self.screen_width - 32), ph)
-        pygame.draw.rect(self.screen, PANEL_COLOR, panel, border_radius=8)
-        pygame.draw.rect(self.screen, PANEL_BORDER, panel, 2, border_radius=8)
+                            min(320, self.screen_width - 32), ph)
+        pygame.draw.rect(self.screen, PANEL_COLOR, panel, border_radius=10)
+        pygame.draw.rect(self.screen, PANEL_BORDER, panel, 2, border_radius=10)
         env = self.world.environment
-        title = f"Day {env.day}  {env.clock_text()}   Temp: {env.temperature}C"
+        title = f"Day {env.day}  ·  {env.clock_text()}  ·  {env.temperature}°C"
         tx, ty = panel.x + 16, panel.y + 12
         title_surf = self.title_font.render(title, True, TEXT_COLOR)
         self.screen.blit(title_surf, (tx, ty))
-        tx += title_surf.get_width() + 12
-        # 날씨: 아이콘이 있으면 "sunny" 같은 영문 대신 그림으로 표시
-        icon_size = 64
+        tx += title_surf.get_width() + 16
+        # 날씨: 아이콘을 타이틀 텍스트와 같은 높이에 인라인으로 표시
+        icon_size = 22
         icon = self._weather_icon(env.weather, icon_size)
         if icon is not None:
-            # 패널 세로 중앙에 맞춰 배치(아이콘이 글자보다 커서, 패널 전체 높이 기준 중앙정렬).
-            icon_y = panel.y + (panel.height - icon.get_height()) // 2
+            icon_y = ty + (title_surf.get_height() - icon.get_height()) // 2
             self.screen.blit(icon, (tx, icon_y))
         else:
-            fallback = self.title_font.render(f"Weather: {env.weather}", True, TEXT_COLOR)
+            fallback = self.title_font.render(env.weather, True, TEXT_COLOR)
             self.screen.blit(fallback, (tx, ty))
-        counts = self.world.counts_by_name()
-        ctext = " | ".join(f"{n}:{c}" for n, c in sorted(counts.items()))
-        self.screen.blit(self.font.render(ctext, True, TEXT_COLOR),
-                         (panel.x + 16, panel.y + 44))
-        cam = f"Map {int(self.camera.x)},{int(self.camera.y)} / drag to move"
-        self.screen.blit(self.small_font.render(cam, True, TEXT_COLOR),
-                         (panel.x + 16, panel.y + 69))
+        # 타이틀과 동물 수 사이 구분선
+        sep_y = panel.y + 42
+        pygame.draw.line(self.screen, PANEL_BORDER,
+                         (panel.x + 14, sep_y), (panel.right - 14, sep_y), 1)
+        # 동물 수: 두 줄로 나눠서 패널 밖으로 삐져나가지 않게
+        items = sorted(self.world.counts_by_name().items())
+        mid = (len(items) + 1) // 2
+        row1 = "  ".join(f"{n} {c}" for n, c in items[:mid])
+        row2 = "  ".join(f"{n} {c}" for n, c in items[mid:])
+        self.screen.blit(self.small_font.render(row1, True, TEXT_COLOR),
+                         (panel.x + 16, panel.y + 50))
+        if row2:
+            self.screen.blit(self.small_font.render(row2, True, TEXT_COLOR),
+                             (panel.x + 16, panel.y + 68))
+        dim = (58, 72, 48)
+        cam = f"드래그로 스크롤   ({int(self.camera.x)}, {int(self.camera.y)})"
+        self.screen.blit(self.small_font.render(cam, True, dim),
+                         (panel.x + 16, panel.y + 95))
         if env.ended:
             self.end_panel(env.end_reason)
 
