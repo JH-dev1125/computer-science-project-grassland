@@ -106,11 +106,10 @@ class Carnivore(Animal):
         self.action_text = "rest"
 
     def detect(self, target):
-        """target 을 탐지했는가. 숨은 대상은 stealth 만큼 더 가까워야 보임."""
-        d = self.distance_to(target)
+        """숨은 대상은 탐지 불가. 노출된 대상만 detect_range 안이면 탐지."""
         if getattr(target, "is_hidden", False):
-            return d < self.detect_range * (1.0 - self.stealth)
-        return d <= self.detect_range
+            return False
+        return self.distance_to(target) <= self.detect_range
 
     def find_prey(self, world):
         prey = world.nearest_prey_for(self, self.detect_range)

@@ -35,21 +35,47 @@ class Elephant(Herbivore):
     def is_hidden(self, value):
         pass
 
+    def behave(self, world: "World", dt: float) -> bool:
+        threat = world.nearest_predator(self, self.panic_range)
+        if threat is not None:
+            self.fight_or_flight(threat, world, dt)
+            return True
+        return self.seek_water_if_needed(world) or self.seek_plants_if_needed(world)
+
+    @property
+    def health(self):
+        return self._health
+
+    @health.setter
+    def health(self, value):
+        if hasattr(self, '_health') and value < self._health:
+            damage = self._health - value
+            if getattr(self, 'stamina', 100.0) < 30.0:
+                damage *= 0.5   # 기력 부족 시 데미지 50% 감소
+            self._health = max(0.0, self._health - damage)
+        else:
+            self._health = value
+
     def fight_or_flight(
         self, threat: Animal, world: Optional["World"], dt: float
     ) -> None:
         del dt
         if world is None:
             return
-        # 포식자가 '바짝' 붙었을 때만 stomp — 맵 끝까지 쫓아가지 않는다.
+        if self.stamina < 30.0:
+            # 기력 부족 — stomp 불가, 맞아도 50% 감소
+            self.stop()
+            self.action_text = "tired"
+            return
         if self.distance_to(threat) <= self.radius + threat.radius + 24:
             self.stomp(threat, world)
         else:
-            self.stop()                 # 가까이 오기 전엔 버티기만(추격 안 함)
+            self.stop()
             self.action_text = "guard"
 
     def stomp(self, target: Animal, world: "World") -> None:
         """가까운 포식자를 공격하고 넉백+공중 바운스로 쫓아낸다."""
+        self.lose_energy(30.0)   # stomp 시 기력 30 소모
         # 10% 확률로 강타 — 40 데미지 직접 적용
         if random.random() < 0.10:
             if target.alive:

@@ -7,5 +7,6 @@ class Cave(Terrain):
         super().__init__("Cave", position, size, color=(82, 75, 67))
 
     def give_effect(self, entity):
-        entity.is_hidden = True
-        entity.action_text = "hidden"
+        if getattr(entity, "name", "") == "Meerkat":
+            entity.is_hidden = True
+            entity.action_text = "hidden"

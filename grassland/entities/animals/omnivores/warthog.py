@@ -27,11 +27,9 @@ class Warthog(Omnivore):
             self.burrow_location = cave.position.copy()
             self.move_toward(cave.position, self.speed * 1.15)
             if cave.contains(self):
-                self.is_hidden = True
                 self.stop()
         else:
             self.burrow_location = self.position.copy()
-            self.is_hidden = True
             self.stop()
         self.action_text = "burrow"
 

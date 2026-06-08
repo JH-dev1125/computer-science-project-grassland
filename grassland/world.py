@@ -259,13 +259,11 @@ class World:
             self._pending_animals = []
 
     def _elephant_bounce(self, living):
-        """코끼리에 닿은 동물을 이동 반대 방향으로 튕겨낸다."""
+        """사자·하이에나가 코끼리에 닿으면 평면 상에서 이동 반대 방향으로 튕겨낸다."""
         elephants = [a for a in living if a.name == "Elephant"]
         for elephant in elephants:
             for other in living:
-                if other is elephant:
-                    continue
-                if getattr(other, 'diet_type', '') == 'herbivore':
+                if other.name not in ("Lion", "Hyena"):
                     continue
                 if elephant.position.distance_to(other.position) >= elephant.radius + other.radius + 4:
                     continue
@@ -278,9 +276,6 @@ class World:
                 power = other.speed * 1.4
                 other.velocity = bounce_dir * power
                 other.desired_velocity = bounce_dir * power
-                other._bounce_timer = 0.35
-                other._bounce_duration = 0.35
-                other._bounce_height = 28.0
 
     def check_end_conditions(self):
         # 가뭄이 3일 이상 이어져 물이 마르면 종료
