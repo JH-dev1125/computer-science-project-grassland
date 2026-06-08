@@ -191,6 +191,8 @@ class World:
         for animal in self.animals:
             animal.is_hidden = False
             animal.interaction_target = None
+            if getattr(animal, '_bounce_timer', 0.0) > 0.0:
+                animal._bounce_timer = max(0.0, animal._bounce_timer - dt)
             animal.update(self, dt)
         # 4) 물리: 충돌 분리 + 이동 + 맵 경계, 그리고 지형 효과
         living = self.living_animals()

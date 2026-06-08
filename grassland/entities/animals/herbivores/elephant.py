@@ -48,11 +48,15 @@ class Elephant(Herbivore):
             self.action_text = "guard"
 
     def stomp(self, target: Animal, world: "World") -> None:
-        """가까운 포식자를 공격하고 넉백으로 '밀어내 쫓아낸다'(죽이기보다 격퇴)."""
+        """가까운 포식자를 공격하고 넉백+공중 바운스로 쫓아낸다."""
         self.attack(target, world)
         away = target.position - self.position
         if away.length_squared() > 1e-6:
             push = away.normalize()
-            target.position = target.position + push * 20.0     # 밀쳐냄
-            target.velocity = push * target.speed               # 밀려나는 방향 속도
+            target.position = target.position + push * 25.0
+            target.velocity = push * target.speed * 1.4
+        # 공중 바운스: gui 가 y 오프셋으로 아크를 표현
+        target._bounce_timer = 0.55
+        target._bounce_duration = 0.55
+        target._bounce_height = 48.0
         self.action_text = "stomp"

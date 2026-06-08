@@ -12,6 +12,7 @@
 #  - terrain 겹침: 지형은 가장 아래 레이어에 먼저 그리고, 배경 Plain 은 fill 로만
 #    처리(개체로 그리지 않음). 지형 좌표도 world 에서 서로 멀리 배치.
 # =============================================================================
+import math
 import pygame
 
 from grassland.config import (
@@ -235,14 +236,27 @@ class GrasslandApp:
         for e in upright:
             x, y = self.world_to_screen(e.position)
             if e.kind == "animal":
-                if e.velocity.x > 6:
-                    e.facing_left = False
-                elif e.velocity.x < -6:
-                    e.facing_left = True
+                dt = getattr(self, 'dt', 0.0)
+                if not hasattr(e, '_flip_cooldown'):
+                    e._flip_cooldown = 0.0
+                e._flip_cooldown = max(0.0, e._flip_cooldown - dt)
+                dvx = e.desired_velocity.x
+                if e._flip_cooldown <= 0.0:
+                    if dvx > 8:
+                        e.facing_left = False
+                        e._flip_cooldown = 0.4
+                    elif dvx < -8:
+                        e.facing_left = True
+                        e._flip_cooldown = 0.4
                 altitude = getattr(e, "altitude", 0.0)
+                bt = getattr(e, '_bounce_timer', 0.0)
+                bd = getattr(e, '_bounce_duration', 1.0)
+                bh = getattr(e, '_bounce_height', 0.0)
+                bounce_y = int(math.sin((1.0 - bt / bd) * math.pi) * bh) if bt > 0.0 else 0
+                total_lift = int(altitude) + bounce_y
                 if altitude > 0.5:
                     self.draw_shadow(e, x, y, altitude)
-                rect = self.blit_sprite(e, x, y - altitude, flip=not getattr(e, "facing_left", True),
+                rect = self.blit_sprite(e, x, y - total_lift, flip=not getattr(e, "facing_left", True),
                                         anchor="bottom")
                 self.health_bar(e, x, rect.top - 6, self.display_size(e))
                 if e is self.selected:   # 선택된 몹은 발밑에 고리를 그려 표시
