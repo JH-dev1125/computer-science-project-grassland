@@ -91,30 +91,31 @@ class BaldEagle(Carnivore):
                 target, nearest = animal, d
         return target
 
-    def hunt_weak_prey(self, world):
-        """빈사 상태 동물을 덮쳐 끝장내고, 생긴 사체까지 먹는다. 처리했으면 True."""
-        target = self.hunt_target
-        if target is None:
-            target = self.find_weak_target(world)
-            if target is None:
-                return False
-            self.hunt_target = target
+    def hunt(self, prey, world, dt):
+        """Carnivore.hunt() 확장 — 빈사 동물 추적·급강하·사체 섭취까지 일괄 처리.
+        이동 속도는 fly_speed + acceleration 으로 부모의 acceleration 메커니즘을 사용."""
+        self.hunt_target = prey
 
-        if target.alive:
+        if prey.alive:
+            if self.stamina <= 8.0:
+                self.rest()
+                return
             self.land()
-            self.interaction_target = target
-            if self.distance_to(target) <= self.radius + target.radius + 8:
-                self.attack(target, world)
+            self.interaction_target = prey
+            if self.distance_to(prey) <= self.radius + prey.radius + 8:
+                self.attack(prey, world)
                 self.stop()
             else:
-                self.move_toward(target.position, self.fly_speed)
+                self.move_toward(prey.position, self.fly_speed + self.acceleration)
             self.action_text = "swoop"
-            return True
+            self.lose_energy(self.hunt_stamina_cost * dt)
+            return
 
+        # 먹이가 죽었으면 생긴 사체를 찾아 먹는다
         carcass = world.nearest_carcass(self.position)
         if carcass is None:
             self.hunt_target = None
-            return False
+            return
         self.interaction_target = carcass
         if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
             self.land()
@@ -126,7 +127,6 @@ class BaldEagle(Carnivore):
             self.action_text = "carcass"
         if not carcass.alive:
             self.hunt_target = None
-        return True
 
     def behave(self, world, dt):
         # 1순위: 위협 회피
@@ -141,7 +141,9 @@ class BaldEagle(Carnivore):
             self.move_away_from(elephant.position, self.fly_speed)
             return True
         # 2순위: 빈사 동물 사냥
-        if self.hunt_weak_prey(world):
+        target = self.hunt_target or self.find_weak_target(world)
+        if target is not None:
+            self.hunt(target, world, dt)
             return True
         # 3순위: 배고프면 지평선 근처 사체로
         if self.hunger > 40.0:
