@@ -59,11 +59,11 @@ class World:
         return world
 
     # ── 랜덤 배치 헬퍼 ───────────────────────────────────────────────────
-    def _random_spot(self, margin=120):
+    def _random_spot(self, margin=50):
         return Vector2(random.uniform(margin, self.width - margin),
                        random.uniform(margin, self.height - margin))
 
-    def _find_spot(self, clearance, margin=120, tries=40):
+    def _find_spot(self, clearance, margin=50, tries=40):
         """이미 놓인 큰 구조물들과 clearance 이상 떨어진 빈 자리를 찾는다.
         충분히 못 찾으면 마지막 후보라도 반환(맵이 꽉 차도 멈추지 않게)."""
         spot = self._random_spot(margin)
@@ -84,7 +84,7 @@ class World:
         셀끼리 안 겹치는 한 구조물도 절대 안 겹친다 → 겹침 0 보장 + 골고루 분포."""
         self.terrains.append(Plain(Vector2(self.width / 2, self.height / 2),
                                    max(self.width, self.height)))
-        cell = 250                                  # 가장 큰 구조물(호숫가 230)이 들어갈 셀
+        cell = 200                                  # 셀을 줄여 구조물이 맵 전체에 더 골고루 퍼지게 함
         cols = max(1, int(self.width // cell))
         rows = max(1, int(self.height // cell))
         cell_w, cell_h = self.width / cols, self.height / rows
@@ -92,53 +92,111 @@ class World:
                  for r in range(rows) for c in range(cols)]
         random.shuffle(cells)
 
-        # 배치할 구조물 목록 (이름, 생성자, 담을 리스트). 가로로 긴 한 줄 격자에 맞춰 적당히.
-        specs = []
-        for _ in range(random.randint(1, 2)):
-            specs.append(("Lake_Side", lambda p: LakeSide(p, size=random.uniform(75, 95)), self.terrains))
-        for _ in range(random.randint(2, 3)):
-            specs.append(("Cave", lambda p: Cave(p, size=random.uniform(55, 75)), self.terrains))
-        for _ in range(random.randint(2, 3)):
-            specs.append(("Acacia_Tree", AcaciaTree, self.plants))
-        for _ in range(random.randint(1, 2)):
-            specs.append(("Baobab_Tree", BaobabTree, self.plants))
-        for _ in range(random.randint(2, 3)):
-            specs.append(("Water_Puddle", WaterPuddle, self.resources))
-        for _ in range(random.randint(3, 5)):
-            specs.append(("Bush", Bush, self.plants))
-        random.shuffle(specs)
-        specs = specs[:len(cells)]                  # 셀 수를 넘지 않게
+        # 가로로 왼쪽/가운데/오른쪽 3구역으로 나눠 두고, 각 종류의 구조물을
+        # '구역을 한 바퀴씩 돌아가며' 뽑아 배치한다 → 특정 종류가 한쪽에 몰리는 것을 방지.
+        thirds = (0, self.width / 3.0, 2 * self.width / 3.0, self.width)
+        buckets = []
+        for i in range(3):
+            lo, hi = thirds[i], thirds[i + 1]
+            bucket = [c for c in cells if lo <= c[0] < hi]
+            random.shuffle(bucket)
+            buckets.append(bucket)
+        region_order = [0, 1, 2]
+        random.shuffle(region_order)
+        region_turn = [0]   # 리스트에 담아 closure 안에서 값 변경(증가) 가능하게 함
 
-        for (name, make, target), (cx, cy) in zip(specs, cells):
+        def pick_cells(n):
+            """다음 n개의 셀을, 구역(왼쪽→가운데→오른쪽 순서를 섞은 순환)을 돌며 고른다.
+            그러면 같은 종류의 구조물이 여러 개일 때 자연히 맵 전역에 퍼진다."""
+            picked = []
+            for _ in range(n):
+                for _try in range(3):
+                    region = region_order[region_turn[0] % 3]
+                    region_turn[0] += 1
+                    if buckets[region]:
+                        picked.append(buckets[region].pop())
+                        break
+                else:
+                    if cells:
+                        picked.append(cells.pop())
+            return picked
+
+        # 종류별로 미리 개수를 정하고, 위 순환 방식으로 위치를 배정한다
+        # (모든 큰 구조물을 같은 방식으로 다뤄 어떤 종류든 한쪽에 쏠리지 않게 함)
+        plan = [
+            ("Lake_Side", lambda p: LakeSide(p, size=random.uniform(75, 95)), self.terrains,
+             random.randint(2, 3)),
+            ("Cave", lambda p: Cave(p, size=random.uniform(55, 75)), self.terrains,
+             random.randint(2, 3)),
+            ("Acacia_Tree", AcaciaTree, self.plants, random.randint(7, 9)),
+            ("Baobab_Tree", BaobabTree, self.plants, random.randint(4, 6)),
+            ("Water_Puddle", WaterPuddle, self.resources, random.randint(0, 1)),
+            ("Bush", Bush, self.plants, random.randint(3, 5)),
+        ]
+
+        all_specs = []
+        all_cells = []
+        for name, make, target, want in plan:
+            got = pick_cells(want)
+            all_specs.extend([(name, make, target)] * len(got))
+            all_cells.extend(got)
+
+        # 남은 빈 셀도 채워 맵 전체에 빈자리가 없게 한다(덤불/물웅덩이 위주, 나무·동굴 과밀 방지)
+        remaining = [c for region in buckets for c in region] + cells
+        for c in remaining:
+            extra_kind = random.choices(
+                [("Bush", Bush, self.plants),
+                 ("Water_Puddle", WaterPuddle, self.resources),
+                 None],   # 빈 셀로 남겨 둬, 덤불이 과하게 채워지지 않게 함(풀이 대신 자랄 자리)
+                weights=[3, 1, 11],
+            )[0]
+            if extra_kind is None:
+                continue
+            all_specs.append(extra_kind)
+            all_cells.append(c)
+
+        gap = 14.0   # 큰 구조물끼리 최소 이만큼은 떨어뜨려, 시각적으로 겹치지 않게 함
+        for (name, make, target), (cx, cy) in zip(all_specs, all_cells):
             vis = self._vis_r(name) * 2             # 시각 지름
             jx = max(0.0, (cell_w - vis) / 2 - 8)   # 셀을 벗어나지 않는 흔들림 한계
             jy = max(0.0, (cell_h - vis) / 2 - 8)
-            pos = self._clamp(Vector2(cx + random.uniform(-jx, jx),
-                                      cy + random.uniform(-jy, jy)), 40)
+            my_r = self._vis_r(name)
+            pos = None
+            for _try in range(20):
+                cand = self._clamp(Vector2(cx + random.uniform(-jx, jx),
+                                           cy + random.uniform(-jy, jy)), 40)
+                if all(cand.distance_to(p) >= my_r + rad + gap for p, rad in self._occupied):
+                    pos = cand
+                    break
+            if pos is None:
+                continue   # 겹치지 않는 자리를 못 찾으면 이 구조물은 건너뜀(겹침 0 유지)
             ent = make(pos)
             target.append(ent)
-            self._occupied.append((ent.position, self._vis_r(name)))
+            self._occupied.append((ent.position, my_r))
 
-    def _on_structure(self, pos):
-        """pos 가 이미 놓인 구조물의 시각 범위 안인가(풀이 구조물 위에 깔리는 것 방지)."""
-        return any(pos.distance_to(p) < rad for p, rad in self._occupied)
+    def _on_structure(self, pos, extra=38):
+        """pos 가 이미 놓인 구조물의 시각 범위 + 여유(extra) 안인가.
+        extra 는 풀·덤불 스프라이트의 시각 반지름(≈35px)만큼 더해,
+        경계선 바로 바깥에 생성해도 이미지가 구조물과 겹치지 않게 한다."""
+        return any(pos.distance_to(p) < rad + extra for p, rad in self._occupied)
 
     def seed_grass(self):
         """풀: 대부분은 듬성듬성 한두 포기씩, 가끔 여러 포기가 모인 군집을 섞어 흩뿌린다.
         (구조물 위에는 깔지 않는다.) 전체 개수는 예전보다 줄여 화면이 덜 빽빽하게."""
-        # 1) 듬성듬성 — 낱개(또는 1~2포기) 풀을 넓게 흩뿌린다
-        for _ in range(random.randint(14, 20)):
-            pos = self._clamp(self._random_spot(60), 40)
+        # 1) 듬성듬성 — 낱개(또는 1~2포기) 풀을 맵 전체에 흩뿌린다 (초기 개수는 줄이고,
+        #    대신 번식 속도를 높여서 점점 빽빽해지게 한다 — regrow_plants 참고)
+        for _ in range(random.randint(22, 30)):
+            pos = self._clamp(self._random_spot(30), 18)
             if self._on_structure(pos):
                 continue
             self.plants.append(Grass(pos))
 
-        # 2) 군집 — 가끔(적은 수) 여러 포기가 모인 덩어리를 만든다
-        for _ in range(random.randint(4, 7)):
-            center = self._random_spot(70)
-            for _ in range(random.randint(4, 7)):
+        # 2) 군집 — 여러 포기가 모인 덩어리를 만든다 (초기 개수는 줄임)
+        for _ in range(random.randint(5, 7)):
+            center = self._random_spot(35)
+            for _ in range(random.randint(5, 9)):
                 offset = Vector2(random.uniform(-50, 50), random.uniform(-50, 50))
-                pos = self._clamp(center + offset, 40)
+                pos = self._clamp(center + offset, 18)
                 if self._on_structure(pos):
                     continue
                 self.plants.append(Grass(pos))
@@ -161,7 +219,7 @@ class World:
 
     def obstacles(self):
         """동물이 통과 못 하는 '벽' 목록 (위치, 막는 반지름).
-        나무(아카시아·바오밥)와 물(호숫가·물웅덩이)만 벽 — 풀·덤불·동굴은 통과 가능."""
+        나무(아카시아·바오밥), 물(호숫가·물웅덩이), 동굴이 벽 — 풀·덤불은 통과 가능."""
         obs = []
         for p in self.plants:
             if p.alive and isinstance(p, (AcaciaTree, BaobabTree)):
@@ -169,6 +227,10 @@ class World:
         for t in self.terrains:
             if isinstance(t, LakeSide):
                 obs.append((t.position, t.radius))
+            elif isinstance(t, Cave):
+                # 동굴 입구 주변은 벽처럼 막는다 — 반지름을 약간 줄여
+                # 미어캣은 contains() 범위 안에 들어올 수 있게 여지를 남긴다.
+                obs.append((t.position, t.radius * 0.7))
         for r in self.resources:
             if r.alive and isinstance(r, WaterPuddle):
                 obs.append((r.position, r.radius))
@@ -225,12 +287,13 @@ class World:
         """살아있는 풀이 씨앗을 퍼뜨려 가끔 주변에 새 풀이 자란다(계획서 spread_seeds).
         풀 공급이 끊겨 초원이 사막화되는 것을 막는다. 전체 풀 수는 상한으로 제한."""
         grasses = [p for p in self.plants if p.alive and p.name == "Grass"]
-        if len(grasses) >= 95:
+        if len(grasses) >= 220:
             return
         for grass in grasses:
-            if random.random() < 0.02 * dt * 60:   # 프레임레이트에 무관하게
+            if random.random() < 0.09 * dt * 60:   # 초기 개수는 줄인 대신 번식 확률을 더 높여 빠르게 퍼짐(프레임레이트 무관)
                 grass.spread_seeds()
-                offset = Vector2(random.uniform(-90, 90), random.uniform(-90, 90))
+                # 씨앗이 더 멀리까지 날아가, 점점 더 넓은 범위로 퍼져나가게 한다
+                offset = Vector2(random.uniform(-160, 160), random.uniform(-160, 160))
                 pos = self._clamp(grass.position + offset, 80)
                 if self._on_structure(pos):        # 구조물 위에는 안 자람
                     break

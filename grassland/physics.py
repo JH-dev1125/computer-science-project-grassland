@@ -57,8 +57,9 @@ class PhysicsEngine:
         if y < top:
             y, entity.velocity.y = top, abs(entity.velocity.y) * 0.3
             self._reflect_heading(entity, axis="y")
-        elif y > self.height - r:
-            y, entity.velocity.y = self.height - r, -abs(entity.velocity.y) * 0.3
+        elif y > self.height:
+            # 아래쪽은 반지름만큼 여유를 두지 않고 화면(맵) 맨 끝까지 갈 수 있게 한다.
+            y, entity.velocity.y = self.height, -abs(entity.velocity.y) * 0.3
             self._reflect_heading(entity, axis="y")
         entity.position.update(x, y)
 

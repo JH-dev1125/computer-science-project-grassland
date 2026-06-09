@@ -40,6 +40,9 @@ class GrasslandApp:
         self.dragging = False
         self._press_pos = None       # 클릭 vs 드래그 구분용(눌렀을 때 화면 좌표)
         self.selected = None         # 클릭으로 선택된 몹(없으면 None)
+        self.clicked_point = None    # 맵의 빈 곳을 클릭했을 때의 월드 좌표(Vector2 또는 None)
+        self.info_collapsed = False  # 좌하단 정보 패널 접힘 여부
+        self.info_toggle_rect = None  # 패널 접기/펼치기 버튼 영역(클릭 판정용, draw_ui 가 매 프레임 갱신)
         self.font = self._font(17)
         self.small_font = self._font(14)
         self.title_font = self._font(22, bold=True)
@@ -79,7 +82,10 @@ class GrasslandApp:
                         dx = event.pos[0] - self._press_pos[0]
                         dy = event.pos[1] - self._press_pos[1]
                         if dx * dx + dy * dy <= 25:
-                            self.handle_click(event.pos)
+                            if self.info_toggle_rect is not None and self.info_toggle_rect.collidepoint(event.pos):
+                                self.info_collapsed = not self.info_collapsed
+                            else:
+                                self.handle_click(event.pos)
                     self._press_pos = None
                 elif event.type == pygame.MOUSEMOTION and self.dragging:
                     self.camera.x -= event.rel[0]   # 가로만 이동(세로 고정)
@@ -272,6 +278,10 @@ class GrasslandApp:
                     ring = pygame.Rect(0, 0, rw + 14, (rw + 14) // 3)
                     ring.center = (x, y - total_lift)
                     pygame.draw.ellipse(self.screen, (255, 230, 90), ring, 3)
+            elif e.name == "Cave":
+                # 동굴은 "땅에 뚫린 구멍" — 스프라이트 중심을 position 에 맞춰야
+                # cave.contains() / move_toward(cave.position) 의 상호작용 위치와 일치한다.
+                self.blit_sprite(e, x, y, anchor="center")
             else:
                 self.blit_sprite(e, x, y, anchor="bottom")
 
@@ -529,21 +539,29 @@ class GrasslandApp:
 
     # ── 몹 클릭 선택 ─────────────────────────────────────────────────────
     def handle_click(self, screen_pos):
-        """화면 좌표를 클릭했을 때, 그 자리의 몹(동물)을 찾아 선택한다.
-        같은 몹을 다시 클릭하면 선택 해제. 빈 곳을 클릭해도 선택 해제."""
+        """화면 좌표를 클릭했을 때:
+        - 그 자리에 몹(동물)이 있으면 선택해 우상단에 속성(좌표 포함)을 띄운다.
+        - 몹이 없으면 '맵의 그 지점'을 클릭한 것으로 보고 좌표를 기억해
+          왼쪽 아래 UI에 표시한다. 같은 몹을 다시 클릭하면 선택 해제."""
         wx = screen_pos[0] + self.camera.x
         wy = screen_pos[1] - self.field_top
         click_pos = Vector2(wx, wy)
         best, best_d = None, None
         for a in self.world.living_animals():
             r = max(self.display_size(a) / 2, a.radius)
-            d = a.position.distance_to(click_pos)
+            # 날고 있는 개체(독수리 등)는 화면상 altitude 만큼 위로 띄워 그려지므로,
+            # 클릭 판정도 그 그려진 위치 기준으로 맞춰야 화면에 보이는 자리를 클릭할 수 있다.
+            altitude = getattr(a, "altitude", 0.0)
+            draw_pos = Vector2(a.position.x, a.position.y - altitude) if altitude else a.position
+            d = draw_pos.distance_to(click_pos)
             if d <= r and (best_d is None or d < best_d):
                 best, best_d = a, d
-        if best is not None and best is self.selected:
-            self.selected = None
+        if best is not None:
+            self.selected = None if best is self.selected else best
+            self.clicked_point = None        # 몹을 선택했으면 지점 표시는 끔
         else:
-            self.selected = best
+            self.selected = None
+            self.clicked_point = click_pos    # 빈 곳 클릭 → 그 지점의 월드 좌표 기억
 
     def draw_selection_panel(self):
         """선택된 몹의 속성을 우상단 패널에 보여준다."""
@@ -553,6 +571,7 @@ class GrasslandApp:
             return
         lines = [
             f"{a.name}  (#{a.id})",
+            f"좌표: ({a.position.x:.0f}, {a.position.y:.0f})",
             f"종류: {getattr(a, 'diet_type', '') or a.kind}",
             f"체력: {a.health:.0f} / {a.max_health:.0f}",
             f"허기: {a.hunger:.0f}   갈증: {a.thirst:.0f}",
@@ -596,21 +615,60 @@ class GrasslandApp:
             cache[name] = scaled
         return scaled or None
 
+    def _draw_translucent_panel(self, rect, alpha=200):
+        """반투명 패널 배경을 그린다 — UI는 항상 맨 위 레이어로 그려지지만,
+        뒤가 비치게 해서 패널 아래 영역(아래쪽 초원)의 동물·식물도 가려지지 않고 보이게 한다."""
+        surf = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(surf, (*PANEL_COLOR, alpha), surf.get_rect(), border_radius=8)
+        self.screen.blit(surf, rect.topleft)
+        pygame.draw.rect(self.screen, PANEL_BORDER, rect, 2, border_radius=8)
+
+    def _draw_toggle_button(self, rect, expand):
+        """정보 패널 접기/펼치기 버튼을 그린다. expand=True 면 '펼치기'(▲), False 면 '접기'(▼)."""
+        pygame.draw.rect(self.screen, PANEL_BORDER, rect, border_radius=5)
+        cx, cy = rect.center
+        w, h = rect.width // 4, rect.height // 5
+        if expand:
+            pts = [(cx - w, cy + h), (cx + w, cy + h), (cx, cy - h)]
+        else:
+            pts = [(cx - w, cy - h), (cx + w, cy - h), (cx, cy + h)]
+        pygame.draw.polygon(self.screen, PANEL_COLOR, pts)
+
     def draw_ui(self):
         # 정보 패널을 '좌하단'에 둔다(상단은 하늘 띠가 차지하므로).
+        # 접힌 상태면 작은 막대만, 펼친 상태면 전체 정보를 보여준다. 우상단 모서리의
+        # 작은 버튼(▲/▼)으로 접고 펼 수 있다.
+        env = self.world.environment
+        btn_size = 22
+        if self.info_collapsed:
+            ph = btn_size + 12
+            panel = pygame.Rect(16, self.screen_height - ph - 14,
+                                220, ph)
+            self._draw_translucent_panel(panel)
+            label = self.small_font.render(f"Day {env.day}  {env.clock_text()}", True, TEXT_COLOR)
+            self.screen.blit(label, (panel.x + 12, panel.y + (ph - label.get_height()) // 2))
+            self.info_toggle_rect = pygame.Rect(panel.right - btn_size - 6,
+                                                 panel.y + (ph - btn_size) // 2,
+                                                 btn_size, btn_size)
+            self._draw_toggle_button(self.info_toggle_rect, expand=True)
+            if env.ended:
+                self.end_panel(env.end_reason)
+            return
+
         ph = 118
         panel = pygame.Rect(16, self.screen_height - ph - 14,
-                            min(320, self.screen_width - 32), ph)
-        pygame.draw.rect(self.screen, PANEL_COLOR, panel, border_radius=10)
-        pygame.draw.rect(self.screen, PANEL_BORDER, panel, 2, border_radius=10)
-        env = self.world.environment
+                            min(700, self.screen_width - 32), ph)
+        self._draw_translucent_panel(panel)
+        self.info_toggle_rect = pygame.Rect(panel.right - btn_size - 8, panel.y + 8,
+                                             btn_size, btn_size)
+        self._draw_toggle_button(self.info_toggle_rect, expand=False)
         title = f"Day {env.day}  ·  {env.clock_text()}  ·  {env.temperature}°C"
         tx, ty = panel.x + 16, panel.y + 12
         title_surf = self.title_font.render(title, True, TEXT_COLOR)
         self.screen.blit(title_surf, (tx, ty))
-        tx += title_surf.get_width() + 16
-        # 날씨: 아이콘을 타이틀 텍스트와 같은 높이에 인라인으로 표시
-        icon_size = 22
+        tx += title_surf.get_width() + 12
+        # 날씨: 아이콘이 있으면 그림으로, 없으면 영문 텍스트로 표시
+        icon_size = 30
         icon = self._weather_icon(env.weather, icon_size)
         if icon is not None:
             icon_y = ty + (title_surf.get_height() - icon.get_height()) // 2
@@ -634,6 +692,8 @@ class GrasslandApp:
                              (panel.x + 16, panel.y + 68))
         dim = (58, 72, 48)
         cam = f"드래그로 스크롤   ({int(self.camera.x)}, {int(self.camera.y)})"
+        if self.clicked_point is not None:
+            cam += f"   |   클릭한 지점: ({self.clicked_point.x:.0f}, {self.clicked_point.y:.0f})"
         self.screen.blit(self.small_font.render(cam, True, dim),
                          (panel.x + 16, panel.y + 95))
         if env.ended:

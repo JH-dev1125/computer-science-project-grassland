@@ -9,12 +9,6 @@ SCREEN_HEIGHT = 720
 MIN_SCREEN_WIDTH = 900
 MIN_SCREEN_HEIGHT = 600
 
-# ── 월드(맵) ─────────────────────────────────────────────
-# 세로 고정·가로 스크롤. 배경 그림의 '지평선'(초록 풀밭이 시작하는 지점, 화면 위에서
-# HORIZON_Y px) 아래가 동물이 다닐 수 있는 땅이다. WORLD_HEIGHT = 720 - HORIZON_Y.
-WORLD_WIDTH = 3800
-WORLD_HEIGHT = 481   # 720 - HORIZON_Y(239) — 새 배경그림의 초원 시작선에 맞춤
-
 # ── 시간 ────────────────────────────────────────────────
 FPS = 60
 GAME_HOURS_PER_SECOND = 0.25   # 실제 1초 = 게임 0.25h → 하루(24h)=96초
@@ -51,9 +45,14 @@ WEATHER_TINT = {
 # 지평선 높이(px): 화면 위에서 이만큼 아래가 '땅'(초록 풀밭)이고, 그 위는 '하늘'.
 # 배경 그림의 풀밭이 시작하는 높이에 맞춘다(이 그림은 약 46% → 720*0.46 ≈ 330).
 # 동물은 이 선(HORIZON_Y) 위로 올라가지 못한다. (코드 곳곳에서 field_top 으로 쓰임)
-HORIZON_Y = 239
+HORIZON_Y = 260
 SKY_BAND_HEIGHT = HORIZON_Y   # 하늘 영역(해·달·구름) 높이 = 지평선까지
 
+# ── 월드(맵) ─────────────────────────────────────────────
+# 세로 고정·가로 스크롤. 배경 그림의 '지평선'(초록 풀밭이 시작하는 지점, 화면 위에서
+# HORIZON_Y px) 아래가 동물이 다닐 수 있는 땅이다. WORLD_HEIGHT = 720 - HORIZON_Y.
+WORLD_WIDTH = 3800
+WORLD_HEIGHT = SCREEN_HEIGHT - HORIZON_Y   # 720 - HORIZON_Y(239) — 새 배경그림의 초원 시작선에 맞춤
 MOB_SPRITE_DIR = "assets/sprites/mobs"
 
 # 개체별 화면 표시 크기(월드 px, 스프라이트의 '긴 변' 기준).
@@ -62,13 +61,13 @@ MOB_SPRITE_DIR = "assets/sprites/mobs"
 #  (대략적인 실제 크기를 게임에서 보기 좋게 압축한 값. 숫자만 바꾸면 크기 조절됨)
 SPRITE_DISPLAY_SIZE = {
     # ── 동물 ── (코끼리와 다른 동물의 크기차를 줄여 현실감과 가독성을 동시에 잡음)
-    "Meerkat": 44, "Warthog": 64, "Gazelle": 66, "Hyena": 70,
-    "Zebra": 76, "Bald_Eagle": 70, "Lion": 84, "Elephant": 104,
+    "Meerkat": 44, "Warthog": 64, "Gazelle": 76, "Hyena": 70,
+    "Zebra": 86, "Bald_Eagle": 70, "Lion": 84, "Elephant": 104,
     # ── 식물 ── (나무는 더 크게: 동물들의 쉼터·은신처 느낌을 살림)
-    "Grass": 56, "Bush": 84, "Acacia_Tree": 230, "Baobab_Tree": 260,
+    "Grass": 70, "Bush": 95, "Acacia_Tree": 250, "Baobab_Tree": 260,
     # ── 자원 ── (작은 물웅덩이도 더 크게)
-    "Water_Puddle": 120, "Carcass": 54,
+    "Water_Puddle": 110, "Carcass": 70,
     # ── 지형 ── (동굴은 더 크게)
-    "Lake_Side": 230, "Cave": 170,
+    "Lake_Side": 215, "Cave": 200,
 }
 SPRITE_DISPLAY_DEFAULT = 70   # 표에 없는 개체의 기본 표시 크기
