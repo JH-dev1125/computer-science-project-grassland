@@ -24,7 +24,7 @@ class Omnivore(Animal):
             return
         self.age += dt
         self.hunger = min(100.0, self.hunger + 1.3 * dt)
-        self.thirst = min(100.0, self.thirst + 1.3 * dt)
+        self.thirst = min(100.0, self.thirst + 0.6 * dt)
         self.recover_stamina(dt)
         if not self.behave(world, dt):
             self.wander(dt)

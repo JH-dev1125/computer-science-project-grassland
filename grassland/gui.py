@@ -12,6 +12,7 @@
 #  - terrain 겹침: 지형은 가장 아래 레이어에 먼저 그리고, 배경 Plain 은 fill 로만
 #    처리(개체로 그리지 않음). 지형 좌표도 world 에서 서로 멀리 배치.
 # =============================================================================
+import math
 import pygame
 
 from grassland.config import (
@@ -156,6 +157,18 @@ class GrasslandApp:
         pygame.draw.ellipse(shadow, (20, 20, 20, fade), shadow.get_rect())
         self.screen.blit(shadow, shadow.get_rect(center=(x, y)))
 
+    def _entity_lift(self, entity):
+        """이 동물을 그릴 때 발밑 좌표(world_to_screen 결과)에서 위로 들어 올리는
+        픽셀 수 — altitude(고도) + bounce(통통 튀는 모션). 그림자는 원래 발밑
+        좌표에 그대로 그리지만, 선택 고리·상호작용 선처럼 '동물 자체'를 가리키는
+        요소는 이만큼 같이 들어 올려야 화면에 보이는 위치와 어긋나지 않는다."""
+        altitude = getattr(entity, "altitude", 0.0)
+        bt = getattr(entity, '_bounce_timer', 0.0)
+        bd = getattr(entity, '_bounce_duration', 1.0)
+        bh = getattr(entity, '_bounce_height', 0.0)
+        bounce_y = int(math.sin((1.0 - bt / bd) * math.pi) * bh) if bt > 0.0 else 0
+        return int(altitude) + bounce_y
+
     # 바닥에 '누운' 것들(평면). 나머지는 '서 있는' 것으로 보고 발밑을 바닥에 딛는다.
     FLAT_NAMES = ("Lake_Side", "Water_Puddle", "Carcass")
 
@@ -235,20 +248,29 @@ class GrasslandApp:
         for e in upright:
             x, y = self.world_to_screen(e.position)
             if e.kind == "animal":
-                if e.velocity.x > 6:
-                    e.facing_left = False
-                elif e.velocity.x < -6:
-                    e.facing_left = True
+                dt = getattr(self, 'dt', 0.0)
+                if not hasattr(e, '_flip_cooldown'):
+                    e._flip_cooldown = 0.0
+                e._flip_cooldown = max(0.0, e._flip_cooldown - dt)
+                dvx = e.desired_velocity.x
+                if e._flip_cooldown <= 0.0:
+                    if dvx > 8:
+                        e.facing_left = False
+                        e._flip_cooldown = 0.4
+                    elif dvx < -8:
+                        e.facing_left = True
+                        e._flip_cooldown = 0.4
                 altitude = getattr(e, "altitude", 0.0)
+                total_lift = self._entity_lift(e)
                 if altitude > 0.5:
                     self.draw_shadow(e, x, y, altitude)
-                rect = self.blit_sprite(e, x, y - altitude, flip=not getattr(e, "facing_left", True),
+                rect = self.blit_sprite(e, x, y - total_lift, flip=not getattr(e, "facing_left", True),
                                         anchor="bottom")
                 self.health_bar(e, x, rect.top - 6, self.display_size(e))
-                if e is self.selected:   # 선택된 몹은 발밑에 고리를 그려 표시
+                if e is self.selected:   # 선택된 몹은 '보이는' 발밑(들어 올려진 위치)에 고리를 그려 표시
                     rw = max(rect.width, 30)
                     ring = pygame.Rect(0, 0, rw + 14, (rw + 14) // 3)
-                    ring.center = (x, y)
+                    ring.center = (x, y - total_lift)
                     pygame.draw.ellipse(self.screen, (255, 230, 90), ring, 3)
             else:
                 self.blit_sprite(e, x, y, anchor="bottom")
@@ -263,6 +285,7 @@ class GrasslandApp:
         "kick":   (220, 50,  50),
         "stomp":  (220, 50,  50),
         "yacha":  (220, 50,  50),
+        "swoop":  (220, 50,  50),
         "steal":  (220, 130, 50),
         "eat":         (80, 200, 80),
         "eat_carcass": (80, 200, 80),
@@ -286,6 +309,8 @@ class GrasslandApp:
                 continue
             ax, ay = self.world_to_screen(animal.position)
             tx, ty = self.world_to_screen(target.position)
+            ay -= self._entity_lift(animal)   # 떠 있는 동물은 '보이는' 몸통에서 선이 시작·도착하도록
+            ty -= self._entity_lift(target)
             color = self._INTERACTION_COLORS.get(
                 getattr(animal, "action_text", ""), (200, 200, 200))
             pygame.draw.line(self.screen, color, (ax, ay), (tx, ty), 2)

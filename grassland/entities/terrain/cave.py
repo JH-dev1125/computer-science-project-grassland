@@ -13,5 +13,6 @@ class Cave(Terrain):
         return entity.name in _CAVE_ALLOWED
 
     def give_effect(self, entity):
-        entity.is_hidden = True
-        entity.action_text = "hidden"
+        if getattr(entity, "name", "") == "Meerkat":
+            entity.is_hidden = True
+            entity.action_text = "hidden"

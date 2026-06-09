@@ -191,12 +191,15 @@ class World:
         for animal in self.animals:
             animal.is_hidden = False
             animal.interaction_target = None
+            if getattr(animal, '_bounce_timer', 0.0) > 0.0:
+                animal._bounce_timer = max(0.0, animal._bounce_timer - dt)
             animal.update(self, dt)
         # 4) 물리: 충돌 분리 + 이동 + 맵 경계, 그리고 지형 효과
         living = self.living_animals()
         self.physics.update(living, dt)
         self.physics.resolve_obstacles(living, self.obstacles())   # 나무·물가 = 벽
         self.physics.apply_terrain_effects(living, self.terrains)
+        self._elephant_bounce(living)
         # 5) 자원 갱신 + 후처리(번식·사망 정리)
         for resource in self.resources:
             resource.update(self, dt)
@@ -254,6 +257,25 @@ class World:
         if self._pending_animals:
             self.animals.extend(self._pending_animals)
             self._pending_animals = []
+
+    def _elephant_bounce(self, living):
+        """사자·하이에나가 코끼리에 닿으면 평면 상에서 이동 반대 방향으로 튕겨낸다."""
+        elephants = [a for a in living if a.name == "Elephant"]
+        for elephant in elephants:
+            for other in living:
+                if other.name not in ("Lion", "Hyena"):
+                    continue
+                if elephant.position.distance_to(other.position) >= elephant.radius + other.radius + 4:
+                    continue
+                v = other.velocity
+                if v.length_squared() > 4.0:
+                    bounce_dir = -v.normalize()
+                else:
+                    away = other.position - elephant.position
+                    bounce_dir = away.normalize() if away.length_squared() > 1e-6 else Vector2(1, 0)
+                power = other.speed * 1.4
+                other.velocity = bounce_dir * power
+                other.desired_velocity = bounce_dir * power
 
     def check_end_conditions(self):
         # 가뭄이 3일 이상 이어져 물이 마르면 종료

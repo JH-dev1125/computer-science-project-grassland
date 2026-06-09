@@ -125,7 +125,7 @@ class Animal(Entity):
     # ── 공통 행동 보조(여러 종이 공유) ───────────────────────────────
     def seek_water_if_needed(self, world):
         """목이 마르면 가장 가까운 물로 이동·음수. 행동했으면 True."""
-        if self.thirst < 58.0:
+        if self.thirst < 75.0:
             return False
         water = world.nearest_water(self.position)
         if water is None:
