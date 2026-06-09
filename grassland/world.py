@@ -395,9 +395,9 @@ class World:
         return self._nearest(self.plants, position,
                              lambda p: isinstance(p, Bush), max_distance)
 
-    def nearest_carcass(self, position):
+    def nearest_carcass(self, position, max_distance=320.0):
         return self._nearest(self.carcasses(), position,
-                             lambda c: c.carried_by is None)
+                             lambda c: c.carried_by is None, max_distance)
 
     def nearest_water(self, position):
         candidates = list(self.water_puddles()) + \
