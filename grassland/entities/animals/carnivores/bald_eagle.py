@@ -115,13 +115,14 @@ class BaldEagle(Carnivore):
         if carcass is None:
             self.hunt_target = None
             return False
-        self.land()
         self.interaction_target = carcass
         if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
+            self.land()
             self.eat_carcass(carcass)
             self.stop()
         else:
-            self.move_toward(carcass.position, self.speed * 0.8)
+            self.fly()
+            self.move_toward(carcass.position, self.fly_speed)
             self.action_text = "carcass"
         if not carcass.alive:
             self.hunt_target = None
@@ -152,7 +153,7 @@ class BaldEagle(Carnivore):
                     self.stop()
                 else:
                     self.fly()
-                    self.move_toward(carcass.position, self.speed * 0.8)
+                    self.move_toward(carcass.position, self.fly_speed)
                     self.action_text = "carcass"
                 return True
         # 4순위: 순찰 비행 — 항상 움직이며 주기적으로 방향 전환(절대 멈추지 않음)
