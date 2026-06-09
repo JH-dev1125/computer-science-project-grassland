@@ -74,22 +74,24 @@ class PhysicsEngine:
             entity.heading = -entity.heading             # 가로 벽 기준 반사
 
     def _separate(self, entities) -> None:
-        """solid 두 원이 겹치면 절반씩 반대로 밀어냄. radius=충돌 크기라 종별 크기 차이 자동 반영."""
-        for i in range(len(entities)):
-            first = entities[i]
-            if not first.solid:
-                continue
-            for second in entities[i + 1:]:
-                if not second.solid:
+        """solid 두 원이 겹치면 절반씩 반대로 밀어냄. 여러 동물이 벽에 동시에 밀려
+        서로 겹치는 경우를 풀기 위해 3번 반복한다(한 번으론 다수 겹침을 못 풀 수 있음)."""
+        for _ in range(3):
+            for i in range(len(entities)):
+                first = entities[i]
+                if not first.solid:
                     continue
-                delta = second.position - first.position
-                distance = delta.length()
-                min_distance = first.radius + second.radius + 2
-                if distance <= 0 or distance >= min_distance:
-                    continue
-                push = delta.normalize() * ((min_distance - distance) * 0.5)
-                first.position = first.position - push
-                second.position = second.position + push
+                for second in entities[i + 1:]:
+                    if not second.solid:
+                        continue
+                    delta = second.position - first.position
+                    distance = delta.length()
+                    min_distance = first.radius + second.radius + 2
+                    if distance <= 0 or distance >= min_distance:
+                        continue
+                    push = delta.normalize() * ((min_distance - distance) * 0.5)
+                    first.position = first.position - push
+                    second.position = second.position + push
 
     def resolve_obstacles(self, animals, obstacles) -> None:
         """나무·물가를 '벽'처럼 처리. 동물이 장애물 원 안에 들어오면 가장자리로 밀어내고,
@@ -126,9 +128,17 @@ class PhysicsEngine:
                     dist = delta.length()
                     push_dist = terrain.size + entity.radius
                     if dist <= 1e-6:
-                        entity.position = terrain.position + Vector2(push_dist, 0)
+                        normal = Vector2(1, 0)
+                        entity.position = terrain.position + normal * push_dist
                     else:
-                        entity.position = terrain.position + delta.normalize() * push_dist
+                        normal = delta / dist
+                        entity.position = terrain.position + normal * push_dist
+                    # resolve_obstacles 와 동일하게 안쪽으로 향하는 속도 성분을 제거해
+                    # 벽면을 따라 부드럽게 미끄러지게 한다(경계 '비벼짐' 방지).
+                    inward = entity.velocity.dot(normal)
+                    if inward < 0:
+                        entity.velocity = entity.velocity - normal * inward
+                    entity.desired_velocity = entity.desired_velocity - normal * min(0, entity.desired_velocity.dot(normal))
                 else:
                     terrain.give_effect(entity)
 

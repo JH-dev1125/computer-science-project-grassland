@@ -6,11 +6,11 @@ _CAVE_ALLOWED = {"Meerkat", "Warthog"}
 
 
 class Cave(Terrain):
-    def __init__(self, position, size=64.0):
+    def __init__(self, position, size=97.0):
         super().__init__("Cave", position, size, color=(82, 75, 67))
 
     def can_enter(self, entity):
-        return entity.name in _CAVE_ALLOWED
+        return True   # 모든 동물이 동굴을 통과할 수 있다(튕김 없음)
 
     def give_effect(self, entity):
         if getattr(entity, "name", "") == "Meerkat":

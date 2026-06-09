@@ -126,7 +126,7 @@ class World:
         plan = [
             ("Lake_Side", lambda p: LakeSide(p, size=random.uniform(75, 95)), self.terrains,
              random.randint(2, 3)),
-            ("Cave", lambda p: Cave(p, size=random.uniform(55, 75)), self.terrains,
+            ("Cave", lambda p: Cave(p, size=random.uniform(90, 105)), self.terrains,
              random.randint(2, 3)),
             ("Acacia_Tree", AcaciaTree, self.plants, random.randint(7, 9)),
             ("Baobab_Tree", BaobabTree, self.plants, random.randint(4, 6)),
@@ -227,10 +227,8 @@ class World:
         for t in self.terrains:
             if isinstance(t, LakeSide):
                 obs.append((t.position, t.radius))
-            elif isinstance(t, Cave):
-                # 동굴 입구 주변은 벽처럼 막는다 — 반지름을 약간 줄여
-                # 미어캣은 contains() 범위 안에 들어올 수 있게 여지를 남긴다.
-                obs.append((t.position, t.radius * 0.7))
+            # Cave 는 apply_terrain_effects() 에서 can_enter 기반으로 처리하므로
+            # 여기서는 제외 — 두 시스템이 동시에 밀면 경계에서 '비벼짐' 현상이 생긴다.
         for r in self.resources:
             if r.alive and isinstance(r, WaterPuddle):
                 obs.append((r.position, r.radius))
