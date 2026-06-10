@@ -18,6 +18,7 @@ from grassland.entities.entity import Entity
 
 class Animal(Entity):
     HUNGER_SEARCH_LEVEL = 80.0
+    ENERGY_COST_MULTIPLIER = 0.6
 
     def __init__(self, name, position, color, health, speed, power,
                  detect_range, radius=18):
@@ -115,7 +116,7 @@ class Animal(Entity):
         self.is_sleeping = False
 
     def lose_energy(self, amount):
-        self.stamina = max(0.0, self.stamina - amount)
+        self.stamina = max(0.0, self.stamina - amount * self.ENERGY_COST_MULTIPLIER)
 
     def die(self, world=None):
         if not self.alive:
@@ -166,7 +167,7 @@ class Animal(Entity):
         """패시브 기력 회복(아주 느림) + 이동 소모."""
         self.stamina = min(100.0, self.stamina + self.stamina_recovery_rate * dt)
         if self.velocity.length_squared() > 1.0:
-            self.lose_energy(0.5 * dt)
+            self.lose_energy(0.25 * dt)
         if self.feed_timer > 0.0:
             self.feed_timer = max(0.0, self.feed_timer - dt)
         self.tick_combat(dt)

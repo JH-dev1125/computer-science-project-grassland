@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python main.py --headless-steps 1)"
-    ]
-  }
-}

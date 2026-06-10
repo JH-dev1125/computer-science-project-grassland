@@ -320,7 +320,7 @@ class World:
                         break
             if heat > 0.0 and not in_shade:
                 a.thirst = min(100.0, a.thirst + heat * 1.4 * dt)
-                a.stamina = max(0.0, a.stamina - heat * 2.0 * dt)
+                a.stamina = max(0.0, a.stamina - heat * 1.0 * dt)
             if env.weather == "drought" and not in_shade:
                 a.health = max(1.0, a.health - 0.6 * dt)
             elif env.weather in ("rain", "cloudy"):

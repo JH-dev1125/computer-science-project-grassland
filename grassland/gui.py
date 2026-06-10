@@ -535,44 +535,6 @@ class GrasslandApp:
             else:
                 self.blit_sprite(e, x, y, anchor="bottom")
 
-        # 3) 상호작용 선: 행동 중인 동물과 대상 사이를 연결
-        self._draw_interaction_lines()
-
-    _INTERACTION_COLORS = {
-        "attack": (220, 50,  50),
-        "hunt":   (220, 50,  50),
-
-        "kick":   (220, 50,  50),
-        "stomp":  (220, 50,  50),
-
-        "swoop":  (220, 50,  50),
-        "steal":  (220, 130, 50),
-        "eat":         (80, 200, 80),
-        "search_food": (140, 210, 140),
-        "drink": (80, 160, 220),
-        "water": (80, 160, 220),
-        "flee":    (240, 180, 50),
-        "zigzag":  (240, 180, 50),
-        "burrow":  (240, 180, 50),
-    }
-
-    def _draw_interaction_lines(self):
-        for animal in self.world.animals:
-            if not animal.alive:
-                continue
-            target = getattr(animal, "interaction_target", None)
-            if target is None:
-                continue
-            if not getattr(target, "alive", True):
-                continue
-            ax, ay = self.world_to_screen(animal.position)
-            tx, ty = self.world_to_screen(target.position)
-            ay -= self._lift(animal)   # 떠 있는 동물은 '보이는' 몸통에서 선이 시작·도착하도록
-            ty -= self._lift(target)
-            color = self._INTERACTION_COLORS.get(
-                getattr(animal, "action_text", ""), (200, 200, 200))
-            pygame.draw.line(self.screen, color, (ax, ay), (tx, ty), 2)
-
     def healthbar(self, animal, x, y, width):
         """동물 머리 위 체력바. 비율(0~1)에 따라 길이와 색이 바뀐다(초록→노랑→빨강)."""
         mx = animal.max_health if animal.max_health > 0 else 1.0
