@@ -198,40 +198,9 @@ class Animal(Entity):
             self.action_text = "water"
         return True
 
-    def seek_plants_if_needed(self, world):
-        """배고프면 가장 가까운 식물로 이동·섭취. 행동했으면 True."""
-        if self.hunger < 40.0:
-            return False
-        plant = world.nearest_plant(self.position, self.food_range)
-        if plant is None:
-            return self.search_for_food(world, "search_food")
-        self.interaction_target = plant
-        if self.distance_to(plant) <= self.radius + plant.radius + 8:
-            self.eat(plant)
-            self.stop()
-        else:
-            self.move_toward(plant.position, self.speed * 0.7)
-            self.action_text = "graze"
-        return True
-
-    def search_for_food(self, world, action_text="search"):
-        """먹이가 감지 범위 안에 없을 때의 적극 탐색.
-        감지 범위를 늘리지는 않고, 쉬지 않고 더 자주 새 목적지를 잡아 맵을 훑게 한다."""
-        if self.hunger < self.HUNGER_SEARCH_LEVEL:
-            return False
-        self.interaction_target = None
-        self.is_resting = False
-        if self._roam is None or self.position.distance_to(self._roam) < 80.0:
-            self._roam = Vector2(random.uniform(35, world.width - 35),
-                                 random.uniform(35, world.height - 35))
-        to = self._roam - self.position
-        if to.length_squared() < 1e-6:
-            self._roam = None
-            return False
-        self.heading = Vector2(1.0, 0.0).angle_to(to)
-        self.desired_velocity = to.normalize() * (self.speed * 0.62)
-        self.action_text = action_text
-        return True
+    def search_food(self, world, dt):
+        """먹이 탐색 — 빈 구현. 각 서브클래스(Herbivore/Carnivore/Omnivore)가 오버라이드."""
+        return False
 
     def evade(self, threat_pos, speed, dt, lateral=0.7, period=0.45):
         """지그재그 회피 — 포식자 반대 방향 + 좌우로 '번갈아' 꺾는 횡방향 성분을 더한다.
@@ -272,7 +241,7 @@ class Animal(Entity):
 
         if self.is_resting:
             self.stop()
-            self.action_text = "watch"
+            self.action_text = "wander"
             return
 
         # 2) 로밍 목적지가 있으면 그쪽으로 이동. 완전한 직선이 아닌 사인파 흔들림을 섞어
@@ -286,7 +255,7 @@ class Animal(Entity):
                 perp = Vector2(-to.y, to.x).normalize()
                 wobble = perp * math.sin(self.age * 1.3) * 0.28
                 self.desired_velocity = (to.normalize() + wobble).normalize() * (self.speed * 0.5)
-                self.action_text = "roam"
+                self.action_text = "wander"
                 return
 
         # 3) 각속도(_turn_rate)를 부드럽게 변화시켜 자연스러운 곡선 경로를 만든다.

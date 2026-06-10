@@ -16,8 +16,7 @@ class Carnivore(Animal):
         self.stealth = 0.18              # 피식자 panic_range 를 줄이는 은신율
         self.acceleration = 34.0         # 추격 순간 속도 증가량
         self.hunt_stamina_cost = 10.0    # 추격 1틱당 스태미나 소모
-        self.hunted_carcass = None       # 방금 직접 사냥해서 먹는 사체
-        self._finished_carcasses = set()  # 절반쯤 먹고 떠난 사체 id
+        self._finished_carcasses = set()  # eat 시도 시 50% 미만이면 영구 블랙리스트
 
     def update(self, world, dt):
         if not self.alive:
@@ -35,52 +34,35 @@ class Carnivore(Animal):
         return world.nearest_named("Elephant", pos, radius) is not None
 
     def behave(self, world, dt):
-        # 1순위: 즉각적 위협 — 코끼리 회피 (범위 확대로 선제 회피)
         elephant = world.nearest_named("Elephant", self.position, 90.0)
         if elephant is not None and self.distance_to(elephant) < 90.0:
             self.move_away_from(elephant.position, self.speed)
             self.action_text = "avoid"
             return True
-        if self.feed_hunted_carcass(world):
-            return True
-        # 2순위: 극도 굶주림 — 단, 목표 주변에 코끼리 없을 때만 접근
-        if self.hunger > 72.0:
-            carcass = self.nearest_available_carcass(world, self.food_range)
-            if carcass is not None and not self._elephant_near(world, carcass.position):
-                self.interaction_target = carcass
-                if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
-                    self.eat(carcass)
-                    self.stop()
-                else:
-                    self.move_toward(carcass.position, self.speed * 0.75)
-                    self.action_text = "carcass"
-                return True
-            prey = self.find_prey(world)
-            if prey is not None and not self._elephant_near(world, prey.position):
-                self.hunt(prey, world, dt)
-                return True
-        # 3순위: 갈증 해소
         if self.seek_water_if_needed(world):
             return True
-        # 4순위: 일반 배고픔 — 코끼리 없는 목표만
-        if self.hunger > 45.0:
-            carcass = self.nearest_available_carcass(world, self.food_range)
-            if carcass is not None and not self._elephant_near(world, carcass.position):
-                self.interaction_target = carcass
-                if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
-                    self.eat(carcass)
-                    self.stop()
-                else:
-                    self.move_toward(carcass.position, self.speed * 0.75)
-                    self.action_text = "carcass"
-                return True
-            prey = self.find_prey(world)
-            if prey is not None and not self._elephant_near(world, prey.position):
-                self.hunt(prey, world, dt)
-                return True
-        if self.hunger >= self.HUNGER_SEARCH_LEVEL:
-            return self.search_for_food(world, "search_prey")
+        if self.search_food(world, dt):
+            return True
         return self.ambush(world, dt)
+
+    def search_food(self, world, dt):
+        if self.hunger < 45.0:
+            return False
+        carcass = self.nearest_available_carcass(world, self.food_range)
+        if carcass is not None and not self._elephant_near(world, carcass.position):
+            self.interaction_target = carcass
+            if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
+                self.eat(carcass)
+                self.stop()
+            else:
+                self.move_toward(carcass.position, self.speed * 0.75)
+                self.action_text = "search_food"
+            return True
+        prey = self.find_prey(world)
+        if prey is not None and not self._elephant_near(world, prey.position):
+            self.hunt(prey, world, dt)
+            return True
+        return False
 
     def ambush(self, world, dt):
         """배고프면 가까운 덤불에 숨어 기다리다, 먹이가 사정권에 들면 덮친다(기습).
@@ -106,11 +88,14 @@ class Carnivore(Animal):
         return True
 
     def eat(self, food):
-        """사체면 being_eaten_by 를 표시(하이에나 탈취·사자 포효 상호작용에 사용).
-        쿨다운마다 한 입씩만 먹는다."""
+        """사체면 being_eaten_by 를 표시(하이에나 탈취 상호작용에 사용).
+        eat 시도 시 사체 잔량이 50% 미만이면 블랙리스트에 추가하고 이탈."""
         if isinstance(food, Carcass):
             self.interaction_target = food
-            self.action_text = "eat_carcass"
+            self.action_text = "eat"
+            if food.amount < food.max_amount * 0.5:
+                self._finished_carcasses.add(food.id)
+                return
             if self._feed_ready():
                 food.reduce_hunger(self)
                 food.being_eaten_by = self
@@ -118,47 +103,11 @@ class Carnivore(Animal):
             super().eat(food)
 
     def nearest_available_carcass(self, world, max_distance=None):
-        """절반쯤 먹고 떠난 사체는 같은 포식자가 바로 다시 붙잡지 않게 제외한다."""
+        """블랙리스트(50% 미만 eat 시도)된 사체는 탐색에서 제외한다."""
         return world._nearest(world.carcasses(), self.position,
                               lambda c: c.id not in self._finished_carcasses
                                         and c.carried_by is None,
                               max_distance)
-
-    def claim_hunted_carcass(self, world, prey):
-        """사냥 직후 생긴 사체를 자기 먹이로 등록한다."""
-        carcass = world.nearest_carcass(prey.position, prey.radius + 35)
-        if carcass is None:
-            return None
-        self.hunted_carcass = carcass
-        carcass.being_eaten_by = self
-        self.interaction_target = carcass
-        return carcass
-
-    def feed_hunted_carcass(self, world):
-        """직접 사냥한 사체는 약 50%까지만 먹고 떠난다."""
-        carcass = self.hunted_carcass
-        if carcass is None:
-            return False
-        if not carcass.alive or carcass.amount <= 0:
-            self.hunted_carcass = None
-            return False
-        if carcass.amount <= carcass.max_amount * 0.5:
-            if carcass.being_eaten_by is self:
-                carcass.being_eaten_by = None
-            self._finished_carcasses.add(carcass.id)
-            self.hunted_carcass = None
-            self.interaction_target = None
-            self.move_away_from(carcass.position, self.speed * 0.35)
-            self.action_text = "leave"
-            return True
-        self.interaction_target = carcass
-        if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
-            self.eat(carcass)
-            self.stop()
-        else:
-            self.move_toward(carcass.position, self.speed * 0.75)
-            self.action_text = "carcass"
-        return True
 
     def hunt(self, prey, world, dt):
         if self.stamina <= 8.0:               # 지치면 추격 포기·휴식
@@ -169,9 +118,8 @@ class Carnivore(Animal):
             was_alive = prey.alive
             self.attack(prey, world)
             if was_alive and not prey.alive:
-                self.claim_hunted_carcass(world, prey)
                 self.stop()
-                self.action_text = "eat_carcass"
+                self.action_text = "eat"
         else:
             # 예측 추격(lead pursuit): 먹이의 '갈 곳'을 노려 다양한 각도로 파고든다.
             # 먹이가 지그재그로 꺾으면 예측이 빗나가 포식자가 헛돈다(자연스러운 회피).

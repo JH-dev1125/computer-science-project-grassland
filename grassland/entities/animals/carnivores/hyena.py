@@ -43,8 +43,6 @@ class Hyena(Carnivore):
         super().hunt(prey, world, dt)
 
     def behave(self, world, dt):
-        if self.feed_hunted_carcass(world):
-            return True
         if self.steal_lunge_timer > 0.0:
             self.steal_lunge_timer = max(0.0, self.steal_lunge_timer - dt)
             self.action_text = "steal"

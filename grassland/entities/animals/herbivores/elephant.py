@@ -65,7 +65,7 @@ class Elephant(Herbivore):
                     self.move_toward(tree.position, self.speed * 0.7)
                 self.action_text = "browse"
                 return True
-        return self.seek_plants_if_needed(world)
+        return self.search_food(world, dt)
 
     @property
     def health(self):

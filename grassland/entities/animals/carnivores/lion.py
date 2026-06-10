@@ -31,8 +31,6 @@ class Lion(Carnivore):
                 self.move_away_from(self._last_elephant_pos, self.speed)
             self.action_text = "avoid"
             return True
-        if self.feed_hunted_carcass(world):
-            return True
         # 2순위: 극도 굶주림 — 목표 근처에 코끼리 없을 때만 접근
         if self.hunger > 72.0:
             prey = self.find_prey(world)
@@ -60,10 +58,8 @@ class Lion(Carnivore):
                     self.stop()
                 else:
                     self.move_toward(carcass.position, self.speed * 0.75)
-                    self.action_text = "carcass"
+                    self.action_text = "search_food"
                 return True
-        if self.hunger >= self.HUNGER_SEARCH_LEVEL:
-            return self.search_for_food(world, "search_prey")
         return self.ambush(world, dt)   # 먹이가 안 보이면 덤불에 숨어 기습 시도
 
     def roar(self, world):

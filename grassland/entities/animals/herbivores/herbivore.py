@@ -92,7 +92,23 @@ class Herbivore(Animal):
                 self.interaction_target = None
                 self.evade(self._last_threat_pos, self.flee_speed * self._escape_luck, dt)
             return True
-        return self.seek_water_if_needed(world) or self.seek_plants_if_needed(world)
+        return self.seek_water_if_needed(world) or self.search_food(world, dt)
+
+    def search_food(self, world, dt):
+        if self.hunger < 40.0:
+            return False
+        reach = None if self.hunger > 92.0 else self.food_range
+        plant = world.nearest_plant(self.position, reach)
+        if plant is None:
+            return False
+        self.interaction_target = plant
+        if self.distance_to(plant) <= self.radius + plant.radius + 8:
+            self.eat(plant)
+            self.stop()
+        else:
+            self.move_toward(plant.position, self.speed * 0.7)
+            self.action_text = "search_food"
+        return True
 
     def can_hide_in_bush(self) -> bool:
         return False
