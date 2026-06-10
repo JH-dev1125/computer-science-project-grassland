@@ -8,6 +8,7 @@
 #   상호작용 발생(추격·도주·먹이·물) : move_toward/away 로 '특정 방향' 지향.
 #   어느 쪽이든 desired_velocity 만 적고, 실제 가감속·회전은 physics 가 부드럽게.
 # =============================================================================
+import math
 import random
 
 from pygame.math import Vector2
@@ -16,6 +17,8 @@ from grassland.entities.entity import Entity
 
 
 class Animal(Entity):
+    HUNGER_SEARCH_LEVEL = 80.0
+
     def __init__(self, name, position, color, health, speed, power,
                  detect_range, radius=18):
         super().__init__(name=name, position=position, radius=radius,
@@ -56,6 +59,7 @@ class Animal(Entity):
         self._roam_chance = 0.4                         # 세그먼트마다 먼 곳 로밍을 새로 잡을 확률
         self._juke_sign = random.choice((-1, 1))       # 지그재그 회피의 현재 좌/우
         self._juke_timer = random.uniform(0.3, 0.6)    # 다음 좌우 전환까지(초)
+        self._turn_rate = random.uniform(-60.0, 60.0)  # 어슬렁 각속도(도/초) — 부드러운 곡선 경로
         self.interaction_target = None                 # 이번 프레임 상호작용 대상
 
     # ── 계획서 공통 메서드 ───────────────────────────────────────────
@@ -149,15 +153,30 @@ class Animal(Entity):
     def recover_stamina(self, dt):
         """실제 이동 속도에 따라 기력을 소모/회복한다(매 update 호출).
         빠르게 달리면(>0.6×speed) 지치고, 느리거나 멈추면 회복한다.
-        기력이 낮으면 physics 가 최고 속도를 깎아 '지쳐서 느려지는' 효과를 준다."""
+        기력이 낮으면 physics 가 최고 속도를 깎아 '지쳐서 느려지는' 효과를 준다.
+        나이가 들수록(age↑) 회복이 서서히 느려진다 — 누적 효과라 체감이 완만하다."""
         run = self.velocity.length() / max(self.speed, 1.0)
+        # 나이 패널티: 노령일수록 기력 회복이 느림(600초 이후 서서히, 최대 40% 감소)
+        age_recovery_factor = max(0.60, 1.0 - self.age * 0.00067)
+        hunger_penalty = max(0.0, min(1.0, (self.hunger - 60.0) / 40.0))
         if run > 0.6:
-            self.stamina = max(0.0, self.stamina - (run - 0.6) * self.stamina_drain * dt)
+            drain = self.stamina_drain * (1.0 + 0.65 * hunger_penalty)
+            self.stamina = max(0.0, self.stamina - (run - 0.6) * drain * dt)
         else:
-            self.stamina = min(100.0, self.stamina + self.stamina_recovery_rate * dt)
+            recovery = self.stamina_recovery_rate * age_recovery_factor * (1.0 - 0.55 * hunger_penalty)
+            self.stamina = min(100.0, self.stamina + recovery * dt)
+        if self.hunger >= 90.0:
+            self.stamina = max(0.0, self.stamina - (self.hunger - 90.0) * 0.10 * dt)
         if self.feed_timer > 0.0:
             self.feed_timer = max(0.0, self.feed_timer - dt)
         self.tick_combat(dt)   # 모든 동물이 매 update 에서 호출 → 전투 쿨다운 감소
+
+    def hunger_speed_factor(self):
+        """심하게 배고플수록 최고 속도가 줄어든다. 80 전까지는 정상, 100에서 65%."""
+        if self.hunger < self.HUNGER_SEARCH_LEVEL:
+            return 1.0
+        pressure = min(1.0, (self.hunger - self.HUNGER_SEARCH_LEVEL) / 20.0)
+        return 1.0 - 0.35 * pressure
 
     # ── 공통 행동 보조(여러 종이 공유) ───────────────────────────────
     def seek_water_if_needed(self, world):
@@ -181,12 +200,11 @@ class Animal(Entity):
 
     def seek_plants_if_needed(self, world):
         """배고프면 가장 가까운 식물로 이동·섭취. 행동했으면 True."""
-        if self.hunger < 35.0:
+        if self.hunger < 40.0:
             return False
-        reach = None if self.hunger > 92.0 else self.food_range
-        plant = world.nearest_plant(self.position, reach)
+        plant = world.nearest_plant(self.position, self.food_range)
         if plant is None:
-            return False
+            return self.search_for_food(world, "search_food")
         self.interaction_target = plant
         if self.distance_to(plant) <= self.radius + plant.radius + 8:
             self.eat(plant)
@@ -194,6 +212,25 @@ class Animal(Entity):
         else:
             self.move_toward(plant.position, self.speed * 0.7)
             self.action_text = "graze"
+        return True
+
+    def search_for_food(self, world, action_text="search"):
+        """먹이가 감지 범위 안에 없을 때의 적극 탐색.
+        감지 범위를 늘리지는 않고, 쉬지 않고 더 자주 새 목적지를 잡아 맵을 훑게 한다."""
+        if self.hunger < self.HUNGER_SEARCH_LEVEL:
+            return False
+        self.interaction_target = None
+        self.is_resting = False
+        if self._roam is None or self.position.distance_to(self._roam) < 80.0:
+            self._roam = Vector2(random.uniform(35, world.width - 35),
+                                 random.uniform(35, world.height - 35))
+        to = self._roam - self.position
+        if to.length_squared() < 1e-6:
+            self._roam = None
+            return False
+        self.heading = Vector2(1.0, 0.0).angle_to(to)
+        self.desired_velocity = to.normalize() * (self.speed * 0.62)
+        self.action_text = action_text
         return True
 
     def evade(self, threat_pos, speed, dt, lateral=0.7, period=0.45):
@@ -218,10 +255,13 @@ class Animal(Entity):
         #    또 가끔 맵의 먼 지점을 목적지로 잡아 멀리까지 돌아다니게 한다.
         self.wander_timer -= dt
         if self.wander_timer <= 0.0:
-            self.is_resting = random.random() < 0.12
-            self.wander_timer = random.uniform(0.8, 2.2)
-            self._cruise = self.speed * random.uniform(0.30, 0.42)
-            if self._roam is None and random.random() < self._roam_chance:
+            hungry = self.hunger >= self.HUNGER_SEARCH_LEVEL
+            self.is_resting = False if hungry else random.random() < 0.12
+            self.wander_timer = random.uniform(0.35, 0.9) if hungry else random.uniform(0.8, 2.2)
+            lo, hi = (0.48, 0.62) if hungry else (0.30, 0.42)
+            self._cruise = self.speed * random.uniform(lo, hi)
+            roam_chance = 0.95 if hungry else self._roam_chance
+            if self._roam is None and random.random() < roam_chance:
                 if world.environment.weather == "drought":
                     tree = world.nearest_tree(self.position, need_foliage=True)
                     self._roam = tree.position.copy() if tree is not None else \
@@ -235,19 +275,27 @@ class Animal(Entity):
             self.action_text = "watch"
             return
 
-        # 2) 로밍 목적지가 있으면 그쪽으로 또박또박 이동(맵 전체 사용). 도착하면 해제.
+        # 2) 로밍 목적지가 있으면 그쪽으로 이동. 완전한 직선이 아닌 사인파 흔들림을 섞어
+        #    자연스럽게 구불구불 이동하도록 한다. 도착하면 해제.
         if self._roam is not None:
             to = self._roam - self.position
             if to.length() < 60.0:
                 self._roam = None
             else:
-                self.heading = Vector2(1.0, 0.0).angle_to(to)   # 로밍 끝나면 그 방향서 이어감
-                self.desired_velocity = to.normalize() * (self.speed * 0.5)
+                self.heading = Vector2(1.0, 0.0).angle_to(to)
+                perp = Vector2(-to.y, to.x).normalize()
+                wobble = perp * math.sin(self.age * 1.3) * 0.28
+                self.desired_velocity = (to.normalize() + wobble).normalize() * (self.speed * 0.5)
                 self.action_text = "roam"
                 return
 
-        # 3) 평소엔 heading 을 조금씩만 회전(부드러운 곡선).
-        self.heading += random.uniform(-45.0, 45.0) * dt
+        # 3) 각속도(_turn_rate)를 부드럽게 변화시켜 자연스러운 곡선 경로를 만든다.
+        #    매 프레임 독립 랜덤값을 더하는 대신, 각속도에 랜덤 가속을 주고 지수 감쇠시킨다.
+        #    → 한동안 같은 방향으로 휘다가 서서히 방향을 바꾸는 유기적인 움직임이 나온다.
+        self._turn_rate += random.uniform(-220.0, 220.0) * dt
+        self._turn_rate *= math.exp(-2.0 * dt)          # 감쇠: 1 초 후 약 13 % 남음
+        self._turn_rate = max(-130.0, min(130.0, self._turn_rate))
+        self.heading += self._turn_rate * dt
         self.desired_velocity = Vector2(1.0, 0.0).rotate(self.heading) * self._cruise
         self.action_text = "wander"
 

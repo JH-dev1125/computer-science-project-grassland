@@ -31,6 +31,8 @@ class Lion(Carnivore):
                 self.move_away_from(self._last_elephant_pos, self.speed)
             self.action_text = "avoid"
             return True
+        if self.feed_hunted_carcass(world):
+            return True
         # 2순위: 극도 굶주림 — 목표 근처에 코끼리 없을 때만 접근
         if self.hunger > 72.0:
             prey = self.find_prey(world)
@@ -41,7 +43,7 @@ class Lion(Carnivore):
         if self.seek_water_if_needed(world):
             return True
         # 4순위: 포효 (안전하고 체력 충분할 때 가끔)
-        if self.stamina > 30.0 and _r.random() < 0.004:
+        if self.hunger < self.HUNGER_SEARCH_LEVEL and self.stamina > 30.0 and _r.random() < 0.004:
             self.roar(world)
             return True
         # 5순위: 일반 배고픔 — 코끼리 없는 먹이만
@@ -50,7 +52,7 @@ class Lion(Carnivore):
             if prey is not None and not self._elephant_near(world, prey.position):
                 self.hunt(prey, world, dt)
                 return True
-            carcass = world.nearest_carcass(self.position, self.food_range)
+            carcass = self.nearest_available_carcass(world, self.food_range)
             if carcass is not None and not self._elephant_near(world, carcass.position):
                 self.interaction_target = carcass
                 if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
@@ -60,6 +62,8 @@ class Lion(Carnivore):
                     self.move_toward(carcass.position, self.speed * 0.75)
                     self.action_text = "carcass"
                 return True
+        if self.hunger >= self.HUNGER_SEARCH_LEVEL:
+            return self.search_for_food(world, "search_prey")
         return self.ambush(world, dt)   # 먹이가 안 보이면 덤불에 숨어 기습 시도
 
     def roar(self, world):
@@ -71,7 +75,8 @@ class Lion(Carnivore):
         self.action_text = "roar"
 
     def hide(self):
-        """오버라이딩: 사자는 더 강력하게 숨는다."""
+        """오버라이딩: 사자는 더 강력하게 숨는다(갈기 덕에 덤불과 잘 섞임).
+        carnivore.ambush() → self.hide() 경로로 실제 호출된다."""
         self.is_hidden = True
-        self.stealth = 0.32
+        self.stealth = 0.42   # 기본(0.4) 보다 약간 강한 사자 매복 은신력
         self.action_text = "hide"

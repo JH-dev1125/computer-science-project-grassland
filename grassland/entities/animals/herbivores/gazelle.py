@@ -22,6 +22,9 @@ class Gazelle(Herbivore):
 
     def zigzag(self, threat, dt):
         """좌우로 '번갈아' 크게 꺾어 달리는 지그재그 도주(가젤 특기). evade 에 강한 횡방향
-        성분(lateral)과 짧은 전환 주기(period)를 줘, 관성으로 못 따라오는 포식자를 흔든다."""
-        self.evade(threat.position, self.flee_speed, dt, lateral=1.1, period=0.4)
+        성분(lateral)과 짧은 전환 주기(period)를 줘, 관성으로 못 따라오는 포식자를 흔든다.
+        zigzag_angle 이 클수록 더 예리하게 꺾여 따라오기 어렵게 된다(52° → lateral≈1.16)."""
+        lateral = self.zigzag_angle / 45.0   # 45°=1.0, 52°≈1.16 — 각도가 직접 기동성에 반영됨
+        self.evade(threat.position, self.flee_speed * self._escape_luck, dt,
+                   lateral=lateral, period=0.4)
         self.action_text = "zigzag"

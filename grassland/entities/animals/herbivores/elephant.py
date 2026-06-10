@@ -30,6 +30,7 @@ class Elephant(Herbivore):
         self.thirst_limit = 48.0   # 코끼리는 물을 많이·자주 마신다
         self.food_range = 120.0        # 나무·풀 탐지(detect_range=150)
         self._roam_chance = 0.75   # 자주 먼 곳을 목적지로 잡아 꾸준히 맵을 돌아다닌다(정체 방지)
+        self._stomp_hold = 0.0     # stomp 이미지를 이 시간 동안 계속 표시(즉시 사라지지 않도록)
 
     @property
     def is_hidden(self):
@@ -83,23 +84,33 @@ class Elephant(Herbivore):
     def fight_or_flight(
         self, threat: Animal, world: Optional["World"], dt: float
     ) -> None:
-        del dt
         if world is None:
             return
+        # stomp 이미지 홀드 타이머 감소
+        self._stomp_hold = max(0.0, self._stomp_hold - dt)
         if self.stamina < 30.0:
             # 기력 부족 — stomp 불가, 맞아도 50% 감소
             self.stop()
             self.action_text = "tired"
             return
+        # 홀드 중이면 stomp 이미지를 유지하되 실제 행동은 계속(중복 에너지 소모 없이)
+        if self._stomp_hold > 0.0:
+            self.action_text = "stomp"
+            if self.distance_to(threat) <= self.radius + threat.radius + 24:
+                self.attack(threat, world)   # 공격 쿨다운 관리만 — 에너지 추가 소모 없음
+            return
         if self.distance_to(threat) <= self.radius + threat.radius + 24:
-            self.stomp(threat, world)
+            self.stomp(threat, world, dt)
         else:
             self.stop()
             self.action_text = "guard"
 
-    def stomp(self, target: Animal, world: "World") -> None:
+    def stomp(self, target: Animal, world: "World", dt: float = 0.016) -> None:
         """가까운 포식자를 공격하고 넉백+공중 바운스로 쫓아낸다."""
-        self.lose_energy(30.0)   # stomp 시 기력 30 소모
+        # dt 기반 에너지 소모 — 매 프레임 호출돼도 초당 35 소모로 일정하게 유지
+        self.lose_energy(35.0 * dt)
+        # stomp 이미지를 0.5초간 유지(이미지가 한 프레임에 사라지지 않도록)
+        self._stomp_hold = 0.5
         # 10% 확률로 강타 — 40 데미지 직접 적용
         if random.random() < 0.10:
             if target.alive:

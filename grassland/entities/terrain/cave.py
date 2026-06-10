@@ -15,4 +15,5 @@ class Cave(Terrain):
     def give_effect(self, entity):
         if getattr(entity, "name", "") == "Meerkat":
             entity.is_hidden = True
-            entity.action_text = "hidden"
+            # "hidden"은 ANIMATIONS 에 없어 애니메이션이 깨졌다. "hide"로 통일.
+            entity.action_text = "hide"

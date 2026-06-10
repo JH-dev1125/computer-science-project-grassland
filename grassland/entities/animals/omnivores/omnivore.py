@@ -42,7 +42,7 @@ class Omnivore(Animal):
             return True
 
         # 3순위: 배고프면 먹이 탐색
-        if self.hunger > 58.0:
+        if self.hunger > 40.0:
             food = self.decide_food(world)
             if food is not None:
                 if self.distance_to(food) <= self.radius + food.radius + 8:
@@ -54,6 +54,9 @@ class Omnivore(Animal):
                     self.move_toward(food.position, self.speed * 0.75)
                     self.action_text = "forage"
                 return True
+            # 감지 범위 안에 먹이가 없으면 이동 탐색
+            if self.hunger >= self.HUNGER_SEARCH_LEVEL:
+                return self.search_for_food(world, "search_food")
         return False
 
     def eat(self, food):
@@ -80,7 +83,7 @@ class Omnivore(Animal):
         return carcass if random.random() < self.diet_preference else plant
 
     def forage(self, world):
-        # decide_food() 래퍼 (외부 호출용)
+        """먹이 감지 범위 안에 없으면 범위를 늘리지 않고 이동 탐색한다."""
         return self.decide_food(world)
 
     def flee_or_fight(self, threat, world, dt):
