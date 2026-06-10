@@ -26,7 +26,7 @@ MEERKAT_GROW_PER_SEC = 0.03   # 미어캣 성장 속도(0→1 만렙까지 ≈ 1
 SEED_COUNTS = {
     "Lion": 5, "Hyena": 6, "Bald_Eagle": 5,
     "Zebra": 7, "Gazelle": 7, "Elephant": 3,
-    "Meerkat": 10, "Warthog": 6,
+    "Meerkat": 10, "Warthog": 7,
 }
 
 # ── 색상 (R,G,B) ────────────────────────────────────────

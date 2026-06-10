@@ -7,34 +7,40 @@ from grassland.entities.animals.omnivores.omnivore import Omnivore
 
 
 class Warthog(Omnivore):
+    MAX_HIDE_DURATION = 5.0   # 굴 안에 최대 머물 수 있는 시간(초)
+
     def __init__(self, position):
-        # 체력 72(튼튼), 속도 68, 공격력 12, 감지 115, 반경 18
         super().__init__("Warthog", position, (121, 95, 70),
                          health=72.0, speed=68.0, power=12.0,
                          detect_range=115.0, radius=18.0)
         self.thirst_limit = 72.0
-        self.food_range = 85.0          # 식물·사체 탐지 거리 (detect_range=115보다 좁음)
-        self.diet_preference = 0.35     # 초식 약간 선호
-        self.aggression = 0.35          # 중간 정도의 맞섬 성향
-        self.burrow_location = None     # 마지막으로 확인한 굴 위치
+        self.food_range = 85.0
+        self.diet_preference = 0.35
+        self.aggression = 0.35
+        self.burrow_location = None
+        self._burrow_cooldown = 0.0   # 굴 재진입 쿨타임 (5초)
+        self._hiding = False          # 현재 굴 안에 은신 중
+        self._hide_elapsed = 0.0      # 이번 은신 경과 시간
 
     def burrow(self, world):
-        # 가까운 동굴로 도주; 동굴이 없으면 현재 위치를 굴로 삼아 멈춤
-        if self.action_text != "burrow":   # 새 도주 시작 시 1회성 비용
-            self.lose_energy(20.0)
+        """가까운 동굴로 전력 질주해 숨는다. 쿨타임 5초, 최대 3초간 은신."""
         cave = world.nearest_terrain_type("Cave", self.position)
         if cave is not None:
             self.burrow_location = cave.position.copy()
-            self.move_toward(cave.position, self.speed * 1.15)
+            self.move_toward(cave.position, self.speed * 1.8)   # 전력 질주
             if cave.contains(self):
                 self.stop()
+                if self._burrow_cooldown <= 0.0:   # 쿨타임 없을 때만 새로 은신 시작
+                    self.is_hidden = True
+                    self._burrow_cooldown = 3.0
+                    self._hiding = True
+                    self._hide_elapsed = 0.0
         else:
             self.burrow_location = self.position.copy()
             self.stop()
         self.action_text = "burrow"
 
     def _engage(self, target, world, dt):
-        """대상으로 접근해, 사정권에 들면 공격."""
         self.interaction_target = target
         if self.distance_to(target) <= self.radius + target.radius + 8:
             self.attack(target, world)
@@ -44,37 +50,45 @@ class Warthog(Omnivore):
             self.action_text = "hunt"
 
     def behave(self, world, dt):
-        # 체력·기력이 넉넉하면 '싸울 수 있는 몸 상태'로 판단
+        self._burrow_cooldown = max(0.0, self._burrow_cooldown - dt)
+
+        # ── 굴 은신 중: 최대 3초, 굴 밖으로 밀리면 즉시 해제 ─────────────
+        if self._hiding:
+            self._hide_elapsed += dt
+            cave = world.nearest_terrain_type("Cave", self.position)
+            if cave is None or not cave.contains(self) \
+                    or self._hide_elapsed >= self.MAX_HIDE_DURATION:
+                self._hiding = False
+                self._hide_elapsed = 0.0
+            else:
+                self.is_hidden = True
+                self.stop()
+                self.action_text = "burrow"
+                return True
+
         healthy = self.health > self.max_health * 0.55 and self.stamina > 35.0
 
         threat = world.nearest_predator(self, self.detect_range)
         if threat is not None:
-            # 체력이 좋고 상대 포식자가 약하면(체력 50%↓) 맞서 싸워 고기를 노린다
             if healthy and threat.health < threat.max_health * 0.5:
                 self._engage(threat, world, dt)
                 return True
-            # 굴이 160 이내에 있으면 "근처"로 판정
             cave = world.nearest_terrain_type("Cave", self.position)
             near_cave = cave is not None and self.distance_to(cave) < 160.0
             if near_cave and self.distance_to(threat) < 48.0 and self.stamina > 18.0:
-                # 굴 근처 + 포식자 근접 + 기력 충분 → 반격
                 self.attack(threat, world)
                 self.lose_energy(7.0 * dt)
             else:
-                # 그 외 → 굴로 도주 (burrow() 내부에서 1회성 비용 처리)
-                self.burrow(world)
+                self.burrow(world)   # 쿨타임 중에도 굴 쪽으로 이동은 계속
             return True
 
-        # 갈증 우선 처리
         if self.seek_water_if_needed(world):
             return True
 
-        # 건강하면 사냥: 탐지 범위 안 약한 동물을 공격해 고기 확보
         if healthy and self.hunger > 45.0:
             prey = world.nearest_weak_or_prey(self, self.detect_range)
             if prey is not None:
                 self._engage(prey, world, dt)
                 return True
 
-        # 배고프면 식물·사체 탐색 (체력 낮을 땐 사냥 못 해 자연히 채식)
         return self.search_food(world, dt)

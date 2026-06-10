@@ -43,9 +43,12 @@ class Hyena(Carnivore):
         if self.hunger > 30.0:
             carcass = world.nearest_carcass(self.position, self.food_range)
             if isinstance(carcass, Carcass):
-                # 다른 포식자가 먹는 사체 → 탈취
-                if carcass.being_eaten_by is not None and carcass.being_eaten_by is not self:
-                    self.hunt(carcass.being_eaten_by, world, dt)
+                # 다른 포식자(하이에나 제외)가 먹는 사체 → 탈취
+                # 하이에나끼리는 스틸 금지 — 서로 뺏고 뺏기는 무한 순환 방지
+                eater = carcass.being_eaten_by
+                if eater is not None and eater is not self \
+                        and getattr(eater, 'name', '') != 'Hyena':
+                    self.hunt(eater, world, dt)
                     return True
                 # 내가 소유 중이거나 주인 없는 사체 → 바로 먹기
                 if (carcass.being_eaten_by is self or carcass.being_eaten_by is None) \

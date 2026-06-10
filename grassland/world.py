@@ -118,7 +118,7 @@ class World:
             ("Lake_Side", lambda p: LakeSide(p, size=random.uniform(75, 95)), self.terrains,
              random.randint(2, 3)),
             ("Cave", lambda p: Cave(p, size=random.uniform(90, 105)), self.terrains,
-             random.randint(2, 3)),
+             random.randint(3, 5)),
             ("Acacia_Tree", AcaciaTree, self.plants, random.randint(7, 9)),
             ("Baobab_Tree", BaobabTree, self.plants, random.randint(4, 6)),
             ("Water_Puddle", WaterPuddle, self.resources, random.randint(0, 1)),
