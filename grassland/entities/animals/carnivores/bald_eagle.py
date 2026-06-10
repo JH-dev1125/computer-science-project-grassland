@@ -110,7 +110,7 @@ class BaldEagle(Carnivore):
                 self.attack(prey, world)
                 if was_alive and not prey.alive:
                     self.hunt_target = None  # 다음 틱에서 search_food()가 사체 탐지
-                self.stop()
+                    self.stop()
             else:
                 self.move_toward(prey.position, self.fly_speed + self.acceleration)
             self.action_text = "swoop"
@@ -132,12 +132,15 @@ class BaldEagle(Carnivore):
             self.fly()
             self.move_away_from(elephant.position, self.fly_speed)
             return True
-        # 2순위: 빈사 동물 사냥
+        # 2순위: 갈증 해소
+        if self.seek_water_if_needed(world):
+            return True
+        # 3순위: 빈사 동물 사냥
         target = self.hunt_target or self.find_weak_target(world)
         if target is not None:
             self.hunt(target, world, dt)
             return True
-        # 3순위: 배고프면 지평선 근처 사체로
+        # 4순위: 배고프면 지평선 근처 사체로
         if self.hunger > 40.0:
             carcass = self.nearest_available_carcass(world, self.food_range)
             if carcass is not None and carcass.position.y <= HORIZON_ZONE:
@@ -150,7 +153,7 @@ class BaldEagle(Carnivore):
                     self.move_toward(carcass.position, self.fly_speed)
                     self.action_text = "search_food"
                 return True
-        # 4순위: 순찰 비행 — 항상 움직이며 주기적으로 방향 전환(절대 멈추지 않음)
+        # 5순위: 순찰 비행 — 항상 움직이며 주기적으로 방향 전환(절대 멈추지 않음)
         self._patrol_timer -= dt
         if self._patrol_timer <= 0.0:
             self._patrol_heading += random.uniform(-90.0, 90.0)

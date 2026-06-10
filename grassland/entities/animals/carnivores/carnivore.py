@@ -17,6 +17,7 @@ class Carnivore(Animal):
         self.acceleration = 34.0         # 추격 순간 속도 증가량
         self.hunt_stamina_cost = 8.0     # 추격 1틱당 스태미나 소모
         self._finished_carcasses = set()  # eat 시도 시 50% 미만이면 영구 블랙리스트
+        self._ambush_mode = False        # 매복 중 공격 상태 — 히스테리시스로 와리가리 방지
 
     def update(self, world, dt):
         if not self.alive:
@@ -46,7 +47,8 @@ class Carnivore(Animal):
         return self.ambush(world, dt)
 
     def search_food(self, world, dt):
-        if self.hunger < 45.0:
+        threshold = 20.0 if self.stamina < 25.0 else 45.0
+        if self.hunger < threshold:
             return False
         carcass = self.nearest_available_carcass(world, self.food_range)
         if carcass is not None and not self._elephant_near(world, carcass.position):
@@ -66,24 +68,32 @@ class Carnivore(Animal):
 
     def ambush(self, world, dt):
         """배고프면 가까운 덤불에 숨어 기다리다, 먹이가 사정권에 들면 덮친다(기습).
-        숨은 동안엔 피식자에게 보이지 않아(nearest_predator 가 제외) 먹이가 가까이 온다."""
+        숨은 동안엔 피식자에게 보이지 않아(nearest_predator 가 제외) 먹이가 가까이 온다.
+        히스테리시스: 공격 진입 110px, 해제 135px → 경계에서 hide↔ambush 와리가리 방지."""
         if self.hunger <= 40.0:
+            self._ambush_mode = False
             return False
         bush = world.nearest_bush(self.position, 260.0)
         if bush is None:
+            self._ambush_mode = False
             return False
         if self.distance_to(bush) <= bush.radius + self.radius + 6:
-            prey = world.nearest_prey_for(self, 110.0)   # 사정권에 든 먹이
+            # 공격 중이면 135px까지 유지, 대기 중이면 110px 진입 시 공격
+            trigger_range = 135.0 if self._ambush_mode else 110.0
+            prey = world.nearest_prey_for(self, trigger_range)
             if prey is not None and not self._elephant_near(world, prey.position):
+                self._ambush_mode = True
                 self.is_hidden = False
-                self.stealth = 0.18  # 매복 해제 시 스텔스 원래대로
-                self.hunt(prey, world, dt)               # 기습 급습!
+                self.stealth = 0.18
+                self.hunt(prey, world, dt)
                 self.action_text = "ambush"
             else:
-                self.hide()    # hide()가 is_hidden, stealth, action_text 를 모두 처리
+                self._ambush_mode = False
+                self.hide()
                 self.stop()
             return True
-        self.move_toward(bush.position, self.speed * 0.85)   # 덤불로 살금살금
+        self._ambush_mode = False
+        self.move_toward(bush.position, self.speed * 0.85)
         self.action_text = "stalk"
         return True
 

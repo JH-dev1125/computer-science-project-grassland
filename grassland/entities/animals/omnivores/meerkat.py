@@ -85,14 +85,21 @@ class Meerkat(Omnivore):
         threat = world.nearest_predator(
             self, self.detect_range * (self.SENTINEL_RANGE if self.is_sentinel else 1.0))
 
+        # 타임어택 조건: 매우 배고프거나 매우 목마를 때 → 포식자를 무릅쓰고 먹이·물 확보
+        _desperate = self.hunger > 75.0 or self.thirst >= self.thirst_limit
+
         if threat is not None:
-            self._hide_timer = 4.5
-            cave = world.nearest_terrain_type("Cave", self.position)
-            if cave is not None:
-                self._use_cave(cave, dt, threatened=True)
+            # 절박한 상태 OR 이미 물 마시는 중 + 포식자가 멀면 → 무시하고 활동 계속
+            if _desperate and self.distance_to(threat) > 55.0:
+                pass  # fall through — 타임어택
+            else:
+                self._hide_timer = 4.5
+                cave = world.nearest_terrain_type("Cave", self.position)
+                if cave is not None:
+                    self._use_cave(cave, dt, threatened=True)
+                    return True
+                self.flee_or_fight(threat, world, dt)
                 return True
-            self.flee_or_fight(threat, world, dt)
-            return True
 
         # 위협이 사라져도 hide_timer가 남아있으면 굴 안에 계속 머문다
         if self._hide_timer > 0.0:
@@ -101,12 +108,15 @@ class Meerkat(Omnivore):
                 self._use_cave(cave, dt)
                 return True
 
-        # 굴에서 너무 멀어졌으면 복귀
+        # 굴에서 너무 멀어졌으면 복귀 — 타임어택(절박) 상태이거나 먹이·물 활동 중이면 허용
         cave = world.nearest_terrain_type("Cave", self.position)
         if cave is not None and self.distance_to(cave) > MEERKAT_HOME_RADIUS:
-            self._roam = None
-            self._use_cave(cave, dt)
-            return True
+            _away_ok = _desperate or self.action_text in (
+                "water", "drink", "eat", "search_food", "forage", "graze")
+            if not _away_ok:
+                self._roam = None
+                self._use_cave(cave, dt)
+                return True
 
         self.is_sentinel = False
         self.sentinel_height = 0.0
@@ -120,15 +130,59 @@ class Meerkat(Omnivore):
         return False
 
     def wander(self, world, dt):
-        """roam 목적지를 굴 반경 안으로 제한한다."""
+        """wander를 굴 반경(MEERKAT_HOME_RADIUS) 안으로 완전히 제한한다.
+        roam 목적지를 굴 중심에서 반경 안으로만 생성하고,
+        heading drift가 경계 근처에 닿으면 굴 방향으로 틀어 와리가리를 방지한다."""
+        import random as _r
+        from pygame.math import Vector2
+
         cave = world.nearest_terrain_type("Cave", self.position)
 
+        # 반경 밖 roam 목적지 미리 취소
         if cave is not None and self._roam is not None:
-            if cave.position.distance_to(self._roam) > MEERKAT_HOME_RADIUS * 0.75:
+            if cave.position.distance_to(self._roam) > MEERKAT_HOME_RADIUS * 0.80:
                 self._roam = None
 
-        super().wander(world, dt)
+        # wander 타이머
+        self.wander_timer -= dt
+        if self.wander_timer <= 0.0:
+            self.is_resting = _r.random() < 0.12
+            self.wander_timer = _r.uniform(0.8, 2.2)
+            self._cruise = self.speed * _r.uniform(0.30, 0.42)
+            if self._roam is None and _r.random() < self._roam_chance:
+                if cave is not None:
+                    # 굴 반경 안 무작위 목적지
+                    angle = _r.uniform(0.0, 360.0)
+                    dist = _r.uniform(20.0, MEERKAT_HOME_RADIUS * 0.70)
+                    raw = cave.position + Vector2(dist, 0.0).rotate(angle)
+                    self._roam = Vector2(
+                        max(20.0, min(raw.x, world.width - 20.0)),
+                        max(20.0, min(raw.y, world.height - 20.0)))
+                else:
+                    self._roam = Vector2(
+                        _r.uniform(0, world.width), _r.uniform(0, world.height))
 
-        if cave is not None and self._roam is not None:
-            if cave.position.distance_to(self._roam) > MEERKAT_HOME_RADIUS * 0.75:
+        if self.is_resting:
+            self.stop()
+            self.action_text = "wander"
+            return
+
+        if self._roam is not None:
+            to = self._roam - self.position
+            if to.length() < 60.0:
                 self._roam = None
+            else:
+                self.heading = Vector2(1.0, 0.0).angle_to(to)
+                self.desired_velocity = to.normalize() * (self.speed * 0.5)
+                self.action_text = "wander"
+                return
+
+        # heading drift — 경계 85% 근처이면 굴 쪽으로 heading 조정
+        if cave is not None and self.distance_to(cave) > MEERKAT_HOME_RADIUS * 0.85:
+            to_cave = cave.position - self.position
+            if to_cave.length_squared() > 1e-6:
+                self.heading = Vector2(1.0, 0.0).angle_to(to_cave)
+
+        self.heading += _r.uniform(-45.0, 45.0) * dt
+        self.desired_velocity = Vector2(1.0, 0.0).rotate(self.heading) * self._cruise
+        self.action_text = "wander"

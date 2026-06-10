@@ -9,7 +9,7 @@ from grassland.entities.animals.herbivores.herbivore import Herbivore
 class Gazelle(Herbivore):
     def __init__(self, position):
         super().__init__("Gazelle", position, (205, 166, 96),
-                         health=52.0, speed=96.0, power=5.0, detect_range=140.0)
+                         health=52.0, speed=96.0, power=5.0, detect_range=110.0)
         self.thirst_limit = 56.0  # 가젤은 자주 물을 찾는다(가장 먼저 물가로)
         self.food_range = 80.0         # 풀 탐지 — 짧게 유지해 분산 유도(detect_range=140)
         self.endurance = 0.6      # 높을수록 도주 중 스태미나 소모↓

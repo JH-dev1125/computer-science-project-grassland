@@ -182,7 +182,8 @@ class Animal(Entity):
         """목이 마르면(종별 thirst_limit 초과) '탐지범위 안'의 물로 이동·음수. 행동했으면 True.
         물이 탐지 범위 밖이면 안 보이는 것으로 보고 False(→ 랜덤워크하다 가까워지면 탐지).
         단, 아주 목마르면(>92) 범위를 무시하고 물을 찾아 나선다(탈수 방지)."""
-        if self.thirst < self.thirst_limit:
+        limit = min(self.thirst_limit, 25.0) if self.stamina < 25.0 else self.thirst_limit
+        if self.thirst < limit:
             return False
         reach = None if self.thirst > 92.0 else self.detect_range
         water = world.nearest_water(self.position, reach)

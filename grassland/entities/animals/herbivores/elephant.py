@@ -54,7 +54,8 @@ class Elephant(Herbivore):
         return self.search_food(world, dt)
 
     def search_food(self, world, dt):
-        if self.hunger < 40.0:
+        threshold = 20.0 if self.stamina < 25.0 else 40.0
+        if self.hunger < threshold:
             return False
         # 나무 잎을 먼저 탐색, 없으면 Herbivore 일반 식물 탐색
         tree = world.nearest_tree(self.position, self.detect_range, need_foliage=True)
