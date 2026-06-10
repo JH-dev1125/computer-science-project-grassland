@@ -55,7 +55,8 @@ class Omnivore(Animal):
             super().eat(food)
 
     def search_food(self, world, dt):
-        if self.hunger < 58.0:
+        threshold = 20.0 if self.stamina < 25.0 else 58.0
+        if self.hunger < threshold:
             return False
         if random.random() < self.aggression:
             prey = world.nearest_weak_or_prey(self, self.detect_range)

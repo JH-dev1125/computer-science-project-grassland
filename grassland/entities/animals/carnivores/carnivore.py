@@ -47,7 +47,8 @@ class Carnivore(Animal):
         return self.ambush(world, dt)
 
     def search_food(self, world, dt):
-        if self.hunger < 45.0:
+        threshold = 20.0 if self.stamina < 25.0 else 45.0
+        if self.hunger < threshold:
             return False
         carcass = self.nearest_available_carcass(world, self.food_range)
         if carcass is not None and not self._elephant_near(world, carcass.position):

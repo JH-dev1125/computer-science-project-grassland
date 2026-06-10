@@ -92,7 +92,8 @@ class Herbivore(Animal):
         return self.seek_water_if_needed(world) or self.search_food(world, dt)
 
     def search_food(self, world, dt):
-        if self.hunger < 40.0:
+        threshold = 20.0 if self.stamina < 25.0 else 40.0
+        if self.hunger < threshold:
             return False
         reach = None if self.hunger > 92.0 else self.food_range
         plant = world.nearest_plant(self.position, reach)

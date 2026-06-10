@@ -50,6 +50,7 @@ class GrasslandApp:
         self.clicked_point = None    # 맵의 빈 곳을 클릭했을 때의 월드 좌표(Vector2 또는 None)
         self.info_collapsed = False  # 좌하단 정보 패널 접힘 여부
         self.info_toggle_rect = None  # 패널 접기/펼치기 버튼 영역(클릭 판정용, draw_ui 가 매 프레임 갱신)
+        self.weather_icon_rect = None  # 날씨 아이콘 영역(툴팁 판정용)
         self.paused = False
         self.speed_index = self.SPEED_STEPS.index(self.DEFAULT_SPEED)
         self.font = self._font(17)
@@ -147,9 +148,8 @@ class GrasslandApp:
         env._weather_hours = 0.0
 
     def _end_game(self):
-        env = self.world.environment
-        env.ended = True
-        env.end_reason = "사용자가 시연을 종료했습니다"
+        from grassland.config import MEERKAT_ENDING_DAY
+        self.world.environment.day = MEERKAT_ENDING_DAY
 
     # ── 카메라 ───────────────────────────────────────────────────────────
     def clamp_camera(self):
@@ -400,6 +400,7 @@ class GrasslandApp:
         self.draw_rain()                          # 비 내리는 묘사(비 올 때만)
         self.draw_ui()                            # 정보 패널(좌하단)
         self.draw_selection_panel()                # 선택한 몹의 속성 패널(우상단)
+        self.draw_weather_tooltip()               # 날씨 아이콘 호버 툴팁
         pygame.display.flip()
 
     def draw_background(self):
@@ -490,7 +491,7 @@ class GrasslandApp:
                 # 바라보는 방향은 '실제 이동 속도'를 따른다(가고 싶은 방향 X).
                 # 벽 근처에서 가장자리 회피로 안쪽으로 꺾이면 얼굴도 안쪽을 향하게 된다.
                 dvx = e.velocity.x
-                if e._flip_cooldown <= 0.0:
+                if e._flip_cooldown <= 0.0 and getattr(e, "action_text", "") != "cave":
                     if dvx > 8:
                         e.facing_left = False
                         e._flip_cooldown = 0.4
@@ -613,7 +614,7 @@ class GrasslandApp:
                            _r.uniform(650, 950)] for _ in range(240)]
 
     # 날씨별 목표 구름 수 — 흐림·비엔 하늘을 구름으로 빽빽하게.
-    CLOUD_COUNTS = {"sunny": 3, "cloudy": 8, "rain": 11, "drought": 2}
+    CLOUD_COUNTS = {"sunny": 3, "cloudy": 15, "rain": 20, "drought": 2}
 
     def _new_cloud(self, x=None):
         import random as _r
@@ -883,6 +884,40 @@ class GrasslandApp:
             x, y = int(d[0]), int(d[1])
             pygame.draw.line(self.screen, (175, 195, 225), (x, y), (x - 5, y + 12), 1)
 
+    _WEATHER_TOOLTIP = {
+        "sunny":   ["☀ 맑음", "갈증 소모 약간 증가", "식물 성장 정상 (×1.0)", "전투력 정상"],
+        "cloudy":  ["☁ 흐림", "체력 +0.5/s 회복", "식물 성장 증가 (×1.15)", "전투력 정상"],
+        "rain":    ["🌧 비", "체력 +0.5/s 회복", "식물 성장 촉진 (×1.9)",
+                   "호수·웅덩이 보충", "전투력 소폭 상승 (×1.05)"],
+        "drought": ["🔥 가뭄", "갈증 빠르게 증가", "스태미나 -2.7/s (그늘 밖)",
+                   "체력 -0.6/s (그늘 밖)", "물 고갈 진행", "식물 성장 급감 (×0.35)",
+                   "전투력 하락 (×0.85)"],
+    }
+
+    def draw_weather_tooltip(self):
+        """날씨 아이콘 위에 마우스가 올라오면 효과 요약 툴팁을 띄운다."""
+        if self.info_collapsed or self.weather_icon_rect is None:
+            return
+        mx, my = pygame.mouse.get_pos()
+        if not self.weather_icon_rect.collidepoint(mx, my):
+            return
+        weather = self.world.environment.weather
+        lines = self._WEATHER_TOOLTIP.get(weather, [weather])
+        pad, line_h = 10, 18
+        w = max(self.small_font.size(l)[0] for l in lines) + pad * 2
+        h = line_h * len(lines) + pad * 2
+        # 아이콘 바로 위에 띄우되 화면 밖으로 나가지 않게 조정
+        tx = max(0, min(mx, self.screen_width - w))
+        ty = max(0, self.weather_icon_rect.top - h - 6)
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        surf.fill((30, 30, 30, 200))
+        pygame.draw.rect(surf, (180, 180, 180, 160), (0, 0, w, h), 1)
+        for i, line in enumerate(lines):
+            color = (255, 220, 80) if i == 0 else (220, 220, 220)
+            txt = self.small_font.render(line, True, color)
+            surf.blit(txt, (pad, pad + i * line_h))
+        self.screen.blit(surf, (tx, ty))
+
     def draw_weather_tint(self):
         """날씨를 화면 전체에 은은한 반투명 색으로 덧칠(하늘 밴드 대체)."""
         color = WEATHER_TINT.get(self.world.environment.weather)
@@ -970,9 +1005,11 @@ class GrasslandApp:
         if icon is not None:
             icon_y = ty + (title_surf.get_height() - icon.get_height()) // 2
             self.screen.blit(icon, (tx, icon_y))
+            self.weather_icon_rect = pygame.Rect(tx, icon_y, icon.get_width(), icon.get_height())
         else:
             fallback = self.title_font.render(env.weather, True, TEXT_COLOR)
             self.screen.blit(fallback, (tx, ty))
+            self.weather_icon_rect = pygame.Rect(tx, ty, fallback.get_width(), fallback.get_height())
         # 타이틀과 동물 수 사이 구분선
         sep_y = panel.y + 42
         pygame.draw.line(self.screen, PANEL_BORDER,
