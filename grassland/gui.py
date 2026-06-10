@@ -452,7 +452,13 @@ class GrasslandApp:
         flat.sort(key=lambda e: e.position.y)
         for e in flat:
             x, y = self.world_to_screen(e.position)
-            self.blit_sprite(e, x, y, anchor="center")
+            if e.name == "Carcass":
+                # amount 비율(0~1)을 0~3 단계로 변환 → carcass0/1/2/3.png 선택
+                fraction = e.amount / e.max_amount if e.max_amount > 0 else 0.0
+                stage = min(3, max(0, round(fraction * 3)))
+                self.blit_sprite(e, x, y, anchor="center", sprite_name=f"carcass{stage}")
+            else:
+                self.blit_sprite(e, x, y, anchor="center")
 
         # 1.5) 풀(Grass): 작은 장식용 깔개라 깊이 정렬에 끼우면 동물 바로 앞에 있을 때
         #      발밑부터 솟아올라 큰 동물(코끼리)의 몸통을 '뚫고' 가리는 것처럼 보인다.
