@@ -225,12 +225,23 @@ class World:
         for _ in range(random.randint(2, 3)):
             self.resources.append(Carcass(self._spot()))
 
+    def _spot_near_cave(self, max_dist=200):
+        """굴(Cave) 반경 max_dist 이내 무작위 위치. 굴이 없으면 일반 _spot()."""
+        caves = [t for t in self.terrains if isinstance(t, Cave)]
+        if not caves:
+            return self._spot()
+        cave = random.choice(caves)
+        angle = random.uniform(0.0, 360.0)
+        dist = random.uniform(25.0, max_dist)
+        return self._clamp(cave.position + Vector2(dist, 0.0).rotate(angle), 30)
+
     def seed_animals(self):
         """config.SEED_COUNTS 만큼 동물을 무작위 위치에 배치한다."""
         for name, count in SEED_COUNTS.items():
             cls = _ANIMAL_TYPES[name]
             for _ in range(count):
-                self.animals.append(cls(self._spot()))
+                pos = self._spot_near_cave(200) if name == "Meerkat" else self._spot()
+                self.animals.append(cls(pos))
 
     def _clamp(self, pos, margin):
         """pos 를 맵 안(가장자리 margin)으로 강제한다."""
@@ -397,7 +408,12 @@ class World:
             density_factor = 1.0 + max(0.0, (cap * 0.5 - cur) / (cap * 0.5)) * 1.5
             mate_range = 80.0 if animal.diet_type != "carnivore" else 60.0
             mate = self.nearest_same_species(animal, mate_range)
-            prob = 0.0010 if animal.diet_type == "carnivore" else 0.0018
+            if animal.diet_type == "carnivore":
+                prob = 0.0010
+            elif animal.name == "Elephant":
+                prob = 0.0005   # 코끼리는 번식이 느리다 (일반 초식의 약 1/4)
+            else:
+                prob = 0.0018
             if mate is not None and random.random() < prob * density_factor:
                 if animal.couple(animal, mate):
                     self.spawn_offspring(animal)

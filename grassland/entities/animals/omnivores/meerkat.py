@@ -86,13 +86,18 @@ class Meerkat(Omnivore):
             self, self.detect_range * (self.SENTINEL_RANGE if self.is_sentinel else 1.0))
 
         if threat is not None:
-            self._hide_timer = 4.5
-            cave = world.nearest_terrain_type("Cave", self.position)
-            if cave is not None:
-                self._use_cave(cave, dt, threatened=True)
+            # 목마른 상태로 물 마시는 중이고 포식자가 멀면 → 마저 마시고 피한다
+            drinking_now = (self.action_text in ("drink", "water")
+                            and self.thirst >= self.thirst_limit)
+            if not (drinking_now and self.distance_to(threat) > 55.0):
+                self._hide_timer = 4.5
+                cave = world.nearest_terrain_type("Cave", self.position)
+                if cave is not None:
+                    self._use_cave(cave, dt, threatened=True)
+                    return True
+                self.flee_or_fight(threat, world, dt)
                 return True
-            self.flee_or_fight(threat, world, dt)
-            return True
+            # fall through — 물 마시기 계속
 
         # 위협이 사라져도 hide_timer가 남아있으면 굴 안에 계속 머문다
         if self._hide_timer > 0.0:
@@ -101,12 +106,15 @@ class Meerkat(Omnivore):
                 self._use_cave(cave, dt)
                 return True
 
-        # 굴에서 너무 멀어졌으면 복귀
+        # 굴에서 너무 멀어졌으면 복귀 — 물/먹이 활동 중이면 허용
         cave = world.nearest_terrain_type("Cave", self.position)
         if cave is not None and self.distance_to(cave) > MEERKAT_HOME_RADIUS:
-            self._roam = None
-            self._use_cave(cave, dt)
-            return True
+            _away_ok = self.action_text in (
+                "water", "drink", "eat", "search_food", "forage", "graze")
+            if not _away_ok:
+                self._roam = None
+                self._use_cave(cave, dt)
+                return True
 
         self.is_sentinel = False
         self.sentinel_height = 0.0

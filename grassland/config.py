@@ -15,7 +15,7 @@ GAME_HOURS_PER_SECOND = 0.25   # 실제 1초 = 게임 0.25h → 하루(24h)=96�
 DAY_LENGTH_HOURS = 24
 
 # ── 초기 동물 수 (seed) ── 종류별 5~7마리로 제한 ───────────
-MEERKAT_HOME_RADIUS = 260   # 미어캣이 굴 중심으로부터 벗어날 수 있는 최대 거리
+MEERKAT_HOME_RADIUS = 200   # 미어캣이 굴 중심으로부터 벗어날 수 있는 최대 거리
 
 # ── 미어캣 엔딩 ──────────────────────────────────────────
 # 이 날짜(게임 일수)를 넘기면 미어캣들이 서서히 거대해지며 모든 동물·식물·나무를
@@ -24,9 +24,9 @@ MEERKAT_ENDING_DAY = 4
 MEERKAT_GROW_PER_SEC = 0.03   # 미어캣 성장 속도(0→1 만렙까지 ≈ 1/이 값 초)
 
 SEED_COUNTS = {
-    "Lion": 2, "Hyena": 3, "Bald_Eagle": 3,
-    "Zebra": 9, "Gazelle": 9, "Elephant": 3,
-    "Meerkat": 6, "Warthog": 6,
+    "Lion": 5, "Hyena": 6, "Bald_Eagle": 5,
+    "Zebra": 7, "Gazelle": 7, "Elephant": 3,
+    "Meerkat": 10, "Warthog": 6,
 }
 
 # ── 색상 (R,G,B) ────────────────────────────────────────
@@ -67,7 +67,7 @@ MOB_SPRITE_DIR = "assets/sprites/mobs"
 #  (대략적인 실제 크기를 게임에서 보기 좋게 압축한 값. 숫자만 바꾸면 크기 조절됨)
 SPRITE_DISPLAY_SIZE = {
     # ── 동물 ── (코끼리와 다른 동물의 크기차를 줄여 현실감과 가독성을 동시에 잡음)
-    "Meerkat": 44, "Warthog": 64, "Gazelle": 76, "Hyena": 70,
+    "Meerkat": 30, "Warthog": 64, "Gazelle": 76, "Hyena": 70,
     "Zebra": 86, "Bald_Eagle": 70, "Lion": 84, "Elephant": 104,
     # ── 식물 ── (나무는 더 크게: 동물들의 쉼터·은신처 느낌을 살림)
     "Grass": 70, "Bush": 95, "Acacia_Tree": 250, "Baobab_Tree": 260,
