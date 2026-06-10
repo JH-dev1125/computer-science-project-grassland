@@ -507,7 +507,6 @@ class World:
                 return False
             return p.has_foliage() if need_foliage else True
         return self._nearest(self.plants, position, ok, max_distance)
-
     def nearest_carcass(self, position, max_distance=None):
         return self._nearest(self.carcasses(), position,
                              lambda c: c.carried_by is None, max_distance)

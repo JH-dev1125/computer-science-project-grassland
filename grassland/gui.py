@@ -855,9 +855,9 @@ class GrasslandApp:
                 self.endpanel(env.end_reason)
             return
 
-        ph = 118
+        ph = 182
         panel = pygame.Rect(16, self.screen_height - ph - 14,
-                            min(700, self.screen_width - 32), ph)
+                            min(370, self.screen_width - 32), ph)
         self._draw_translucent_panel(panel)
         self.info_toggle_rect = pygame.Rect(panel.right - btn_size - 8, panel.y + 8,
                                              btn_size, btn_size)
@@ -891,15 +891,54 @@ class GrasslandApp:
             self.screen.blit(self.small_font.render(row2, True, TEXT_COLOR),
                              (panel.x + 16, panel.y + 68))
         dim = (58, 72, 48)
-        cam = f"드래그로 스크롤   ({int(self.camera.x)}, {int(self.camera.y)})"
+        cam = f"드래그 ({int(self.camera.x)}, {int(self.camera.y)})"
         if self.clicked_point is not None:
-            cam += f"   |   클릭한 지점: ({self.clicked_point.x:.0f}, {self.clicked_point.y:.0f})"
+            cam += f" | 클릭 ({self.clicked_point.x:.0f}, {self.clicked_point.y:.0f})"
         self.screen.blit(self.small_font.render(cam, True, dim),
                          (panel.x + 16, panel.y + 95))
+        self.draw_minimap(panel)
         if env.ended:
-            self.endpanel(env.end_reason)
+            self.end_panel(env.end_reason)
 
-    def endpanel(self, reason):
+    def draw_minimap(self, panel):
+        """패널 하단에 전체 월드를 축소한 가로 띠 미니맵을 그린다.
+        동물은 색깔 점으로 표시하고, 현재 화면 영역은 흰 테두리로 표시한다."""
+        mg = 12  # 패널 가장자리 여백
+        mm_w = panel.width - mg * 2
+        scale = mm_w / max(1, self.world.width)
+        mm_h = max(28, int(self.world.height * scale))
+        mm_x = panel.x + mg
+        mm_y = panel.bottom - mm_h - mg
+
+        # 구분선
+        sep_y = mm_y - 8
+        pygame.draw.line(self.screen, PANEL_BORDER,
+                         (panel.x + 14, sep_y), (panel.right - 14, sep_y), 1)
+
+        # 배경 (초원색)
+        pygame.draw.rect(self.screen, (100, 150, 72), (mm_x, mm_y, mm_w, mm_h))
+
+        # 동물 점
+        prev_clip = self.screen.get_clip()
+        self.screen.set_clip(pygame.Rect(mm_x, mm_y, mm_w, mm_h))
+        for animal in self.world.animals:
+            if not animal.alive:
+                continue
+            ax = mm_x + int(animal.position.x * scale)
+            ay = mm_y + int(animal.position.y * scale)
+            pygame.draw.circle(self.screen, animal.color, (ax, ay), 2)
+        self.screen.set_clip(prev_clip)
+
+        # 현재 화면 영역 표시
+        vp_x = mm_x + int(self.camera.x * scale)
+        vp_w = max(4, int(self.screen_width * scale))
+        pygame.draw.rect(self.screen, (255, 255, 200),
+                         (vp_x, mm_y, vp_w, mm_h), 2)
+
+        # 테두리
+        pygame.draw.rect(self.screen, PANEL_BORDER, (mm_x, mm_y, mm_w, mm_h), 1)
+
+    def end_panel(self, reason):
         panel = pygame.Rect(0, 0, min(680, self.screen_width - 48), 150)
         panel.center = (self.screen_width // 2, self.screen_height // 2)
         pygame.draw.rect(self.screen, (245, 235, 211), panel, border_radius=8)
