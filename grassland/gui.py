@@ -253,6 +253,13 @@ class GrasslandApp:
                        "hide": (["meerkat_hide"], 1.4),
                        "idle": (["meerkat"], 1.0)},
         },
+        "Warthog": {
+            "actions": {"burrow": "liedown",
+                        "water": "walk", "search_food": "walk"},
+            "states": {"walk": (["warthog", "warthog_walk1"], 0.28),
+                       "liedown": (["warthog_liedown"], 1.0),
+                       "idle": (["warthog"], 1.0)},
+        },
     }
 
     def _animation(self, entity):
@@ -458,6 +465,11 @@ class GrasslandApp:
                 fraction = e.amount / e.max_amount if e.max_amount > 0 else 0.0
                 stage = min(3, max(0, round(fraction * 3)))
                 self.blit_sprite(e, x, y, anchor="center", sprite_name=f"carcass{stage}")
+            elif e.name == "Lake_Side":
+                # 물이 40% 미만으로 줄면 가뭄 이미지로 전환
+                fraction = e.water / e.max_water if e.max_water > 0 else 0.0
+                sname = "lake_side_drought" if fraction < 0.4 else "lake_side"
+                self.blit_sprite(e, x, y, anchor="center", sprite_name=sname)
             else:
                 self.blit_sprite(e, x, y, anchor="center")
 
