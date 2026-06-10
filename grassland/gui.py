@@ -500,15 +500,12 @@ class GrasslandApp:
                         e._flip_cooldown = 0.4
                 altitude = getattr(e, "altitude", 0.0)
                 total_lift = self._lift(e)
-                # 하이에나: 덤불 안에 있으면 반투명 (ambush 없이 시각 효과만)
-                if e.name == "Hyena":
-                    e._in_bush = any(
-                        p.alive and p.name == "Bush"
-                        and e.position.distance_to(p.position) < p.radius
-                        for p in self.world.plants
-                    )
-                else:
-                    e._in_bush = False
+                # 덤불 안에 있는 동물은 반투명 (is_hidden 있는 동물은 그쪽이 우선)
+                e._in_bush = any(
+                    p.alive and p.name == "Bush"
+                    and e.position.distance_to(p.position) < p.radius
+                    for p in self.world.plants
+                )
                 self.draw_shadow(e, x, y, altitude)
                 frame = self._frame(e, dt)
                 rect = self.blit_sprite(e, x, y - total_lift, flip=not getattr(e, "facing_left", True),
