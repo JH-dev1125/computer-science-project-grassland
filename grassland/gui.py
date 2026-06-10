@@ -933,22 +933,27 @@ class GrasslandApp:
                 self.endpanel(env.end_reason)
             return
 
+        # 타이틀·아이콘을 먼저 측정해 패널 너비를 딱 맞게 계산
+        state = "PAUSED" if self.paused else f"x{self.time_scale:g}"
+        title = f"Day {env.day} · {env.clock_text()} · {env.temperature}°C · {state}"
+        title_surf = self.title_font.render(title, True, TEXT_COLOR)
+        icon_size = 26
+        icon = self._weather_icon(env.weather, icon_size)
+        icon_w = (icon.get_width() if icon is not None else
+                  self.title_font.size(env.weather)[0]) + 10
+        # 패널 너비 = 왼쪽 여백 + 타이틀 + 간격 + 아이콘 + 토글버튼 + 오른쪽 여백
+        row_needed = 16 + title_surf.get_width() + 10 + icon_w + btn_size + 18
         ph = 182
         panel = pygame.Rect(16, self.screen_height - ph - 14,
-                            min(370, self.screen_width - 32), ph)
+                            min(max(row_needed, 260), self.screen_width - 32), ph)
         self._draw_translucent_panel(panel)
         self.info_toggle_rect = pygame.Rect(panel.right - btn_size - 8, panel.y + 8,
                                              btn_size, btn_size)
         self._draw_toggle_button(self.info_toggle_rect, expand=False)
-        state = "PAUSED" if self.paused else f"x{self.time_scale:g}"
-        title = f"Day {env.day}  ·  {env.clock_text()}  ·  {env.temperature}°C  ·  {state}"
         tx, ty = panel.x + 16, panel.y + 12
-        title_surf = self.title_font.render(title, True, TEXT_COLOR)
         self.screen.blit(title_surf, (tx, ty))
-        tx += title_surf.get_width() + 12
+        tx += title_surf.get_width() + 10
         # 날씨: 아이콘이 있으면 그림으로, 없으면 영문 텍스트로 표시
-        icon_size = 30
-        icon = self._weather_icon(env.weather, icon_size)
         if icon is not None:
             icon_y = ty + (title_surf.get_height() - icon.get_height()) // 2
             self.screen.blit(icon, (tx, icon_y))
