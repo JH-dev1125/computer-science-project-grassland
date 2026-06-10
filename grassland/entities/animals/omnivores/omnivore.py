@@ -27,7 +27,7 @@ class Omnivore(Animal):
         self.thirst = min(100.0, self.thirst + 0.6 * dt)
         self.recover_stamina(dt)
         if not self.behave(world, dt):
-            self.wander(dt)
+            self.wander(world, dt)
 
     def behave(self, world, dt):
         threat = world.nearest_predator(self, self.detect_range)
@@ -50,16 +50,18 @@ class Omnivore(Animal):
 
     def eat(self, food):
         if isinstance(food, Carcass):
-            food.reduce_hunger(self)
-            food.being_eaten_by = self
+            self.interaction_target = food
             self.action_text = "eat_carcass"
+            if self._feed_ready():
+                food.reduce_hunger(self)
+                food.being_eaten_by = self
         else:
             super().eat(food)
 
     def decide_food(self, world):
-        """diet_preference 에 따라 사체 또는 식물을 고른다."""
-        carcass = world.nearest_carcass(self.position)
-        plant = world.nearest_plant(self.position)
+        """diet_preference 에 따라 '먹이 탐지 거리(food_range)' 안의 사체/식물을 고른다."""
+        carcass = world.nearest_carcass(self.position, self.food_range)
+        plant = world.nearest_plant(self.position, self.food_range)
         if carcass is None:
             return plant
         if plant is None:
@@ -74,5 +76,4 @@ class Omnivore(Animal):
             self.attack(threat, world)
             self.action_text = "fight"
         else:
-            self.move_away_from(threat.position, self.speed * 1.15)
-            self.action_text = "flee"
+            self.evade(threat.position, self.speed * 1.15, dt)

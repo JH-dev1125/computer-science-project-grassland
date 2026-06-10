@@ -15,7 +15,8 @@ from pygame.math import Vector2
 
 from grassland.config import (
     SEED_COUNTS, WORLD_HEIGHT, WORLD_WIDTH,
-    SPRITE_DISPLAY_SIZE, SPRITE_DISPLAY_DEFAULT)
+    SPRITE_DISPLAY_SIZE, SPRITE_DISPLAY_DEFAULT,
+    MEERKAT_ENDING_DAY, MEERKAT_GROW_PER_SEC)
 from grassland.physics import PhysicsEngine
 from grassland.environment import Environment, DroughtEvent
 
@@ -47,6 +48,7 @@ class World:
         self.drought_event = None
         self._pending_animals = []     # 이번 프레임에 태어난 새끼(끝나고 합침)
         self._occupied = []            # (position, radius) — 큰 구조물 겹침 방지용
+        self.meerkat_ending = False    # 미어캣 엔딩(거대 미어캣이 모든 것을 잠식) 진행 중
 
     # ── 초기 배치 ────────────────────────────────────────────────────────
     @classmethod
@@ -59,22 +61,11 @@ class World:
         return world
 
     # ── 랜덤 배치 헬퍼 ───────────────────────────────────────────────────
-    def _random_spot(self, margin=50):
+    def _spot(self, margin=50):
         return Vector2(random.uniform(margin, self.width - margin),
                        random.uniform(margin, self.height - margin))
 
-    def _find_spot(self, clearance, margin=50, tries=40):
-        """이미 놓인 큰 구조물들과 clearance 이상 떨어진 빈 자리를 찾는다.
-        충분히 못 찾으면 마지막 후보라도 반환(맵이 꽉 차도 멈추지 않게)."""
-        spot = self._random_spot(margin)
-        for _ in range(tries):
-            spot = self._random_spot(margin)
-            if all(spot.distance_to(pos) >= clearance + rad
-                   for pos, rad in self._occupied):
-                break
-        return spot
-
-    def _vis_r(self, name):
+    def _radius(self, name):
         """화면에 그려지는 '시각적' 반지름. 표시 크기의 절반."""
         return SPRITE_DISPLAY_SIZE.get(name, SPRITE_DISPLAY_DEFAULT) / 2.0
 
@@ -157,10 +148,10 @@ class World:
 
         gap = 14.0   # 큰 구조물끼리 최소 이만큼은 떨어뜨려, 시각적으로 겹치지 않게 함
         for (name, make, target), (cx, cy) in zip(all_specs, all_cells):
-            vis = self._vis_r(name) * 2             # 시각 지름
+            vis = self._radius(name) * 2             # 시각 지름
             jx = max(0.0, (cell_w - vis) / 2 - 8)   # 셀을 벗어나지 않는 흔들림 한계
             jy = max(0.0, (cell_h - vis) / 2 - 8)
-            my_r = self._vis_r(name)
+            my_r = self._radius(name)
             pos = None
             for _try in range(20):
                 cand = self._clamp(Vector2(cx + random.uniform(-jx, jx),
@@ -174,43 +165,72 @@ class World:
             target.append(ent)
             self._occupied.append((ent.position, my_r))
 
-    def _on_structure(self, pos, extra=38):
+    def _blocked(self, pos, extra=38):
         """pos 가 이미 놓인 구조물의 시각 범위 + 여유(extra) 안인가.
         extra 는 풀·덤불 스프라이트의 시각 반지름(≈35px)만큼 더해,
         경계선 바로 바깥에 생성해도 이미지가 구조물과 겹치지 않게 한다."""
         return any(pos.distance_to(p) < rad + extra for p, rad in self._occupied)
 
-    def seed_grass(self):
-        """풀: 대부분은 듬성듬성 한두 포기씩, 가끔 여러 포기가 모인 군집을 섞어 흩뿌린다.
-        (구조물 위에는 깔지 않는다.) 전체 개수는 예전보다 줄여 화면이 덜 빽빽하게."""
-        # 1) 듬성듬성 — 낱개(또는 1~2포기) 풀을 맵 전체에 흩뿌린다 (초기 개수는 줄이고,
-        #    대신 번식 속도를 높여서 점점 빽빽해지게 한다 — regrow_plants 참고)
-        for _ in range(random.randint(22, 30)):
-            pos = self._clamp(self._random_spot(30), 18)
-            if self._on_structure(pos):
-                continue
-            self.plants.append(Grass(pos))
+    def _side_spot(self, margin=30):
+        """가장자리(좌/우)에 더 잘 걸리는 무작위 위치. 풀을 양옆으로 퍼뜨려 동물이
+        중앙에만 몰리지 않게 한다(70%는 바깥 1/3, 30%만 중앙)."""
+        if random.random() < 0.85:   # 85%는 바깥 1/3(좌·우)에 — 중앙 쏠림 방지
+            x = (random.uniform(margin, self.width * 0.33) if random.random() < 0.5
+                 else random.uniform(self.width * 0.67, self.width - margin))
+        else:
+            x = random.uniform(self.width * 0.33, self.width * 0.67)
+        return Vector2(x, random.uniform(margin, self.height - margin))
 
-        # 2) 군집 — 여러 포기가 모인 덩어리를 만든다 (초기 개수는 줄임)
-        for _ in range(random.randint(5, 7)):
-            center = self._random_spot(35)
-            for _ in range(random.randint(5, 9)):
-                offset = Vector2(random.uniform(-50, 50), random.uniform(-50, 50))
-                pos = self._clamp(center + offset, 18)
-                if self._on_structure(pos):
-                    continue
+    def _on_water(self, pos, pad=44):
+        """pos 가 물(웅덩이·호숫가) 위/근처인가 — 풀이 물과 겹치지 않게 한다.
+        (비로 새로 생긴 웅덩이까지 포함하도록 _occupied 가 아니라 현재 물을 직접 본다.)"""
+        for w in self.water_puddles():
+            if pos.distance_to(w.position) < w.radius + pad:
+                return True
+        for t in self.terrains:
+            if isinstance(t, LakeSide) and pos.distance_to(t.position) < t.radius + pad:
+                return True
+        return False
+
+    def _grass_blocked(self, pos):
+        return self._blocked(pos) or self._on_water(pos)
+
+    def _spawn_grass_cluster(self, center, count=None):
+        """중심 둘레로 5~7 포기만 '원형'으로 모은 자연스러운 풀 덩어리(일자 X, 과밀 X)."""
+        count = count or random.randint(5, 7)
+        base_ang = random.uniform(0.0, 360.0)
+        for i in range(count):
+            ang = base_ang + 360.0 * i / count + random.uniform(-22.0, 22.0)
+            off = Vector2(random.uniform(22.0, 50.0), 0.0).rotate(ang)
+            pos = self._clamp(center + off, 18)
+            if not self._grass_blocked(pos):
                 self.plants.append(Grass(pos))
+
+    def seed_grass(self):
+        """풀: 중앙은 듬성듬성 1~2 포기, 사이드는 5~7 포기 원형 군집 몇 개."""
+        # 1) 중앙 — 듬성듬성 1~2 포기씩 넓게 흩뿌림
+        for _ in range(random.randint(6, 9)):
+            c = Vector2(random.uniform(self.width * 0.34, self.width * 0.66),
+                        random.uniform(30, self.height - 30))
+            for _ in range(random.randint(1, 2)):
+                pos = self._clamp(c + Vector2(random.uniform(-24, 24),
+                                              random.uniform(-24, 24)), 18)
+                if not self._grass_blocked(pos):
+                    self.plants.append(Grass(pos))
+        # 2) 사이드 — 5~7 포기 원형 군집 몇 개
+        for _ in range(random.randint(4, 6)):
+            self._spawn_grass_cluster(self._side_spot(45))
 
     def seed_carcasses(self):
         for _ in range(random.randint(2, 3)):
-            self.resources.append(Carcass(self._random_spot()))
+            self.resources.append(Carcass(self._spot()))
 
     def seed_animals(self):
         """config.SEED_COUNTS 만큼 동물을 무작위 위치에 배치한다."""
         for name, count in SEED_COUNTS.items():
             cls = _ANIMAL_TYPES[name]
             for _ in range(count):
-                self.animals.append(cls(self._random_spot()))
+                self.animals.append(cls(self._spot()))
 
     def _clamp(self, pos, margin):
         """pos 를 맵 안(가장자리 margin)으로 강제한다."""
@@ -254,27 +274,73 @@ class World:
             if getattr(animal, '_bounce_timer', 0.0) > 0.0:
                 animal._bounce_timer = max(0.0, animal._bounce_timer - dt)
             animal.update(self, dt)
-        # 4) 물리: 충돌 분리 + 이동 + 맵 경계, 그리고 지형 효과
+        # 4) 물리: 조향 이동(분리·회피·가장자리) + 지형 효과
         living = self.living_animals()
-        self.physics.update(living, dt)
-        self.physics.resolve_obstacles(living, self.obstacles())   # 나무·물가 = 벽
+        self.physics.update(living, self.obstacles(), dt)   # 나무·물가 = 구조물(회피·통과불가)
         self.physics.apply_terrain_effects(living, self.terrains)
         self._elephant_bounce(living)
+        self.apply_weather_effects(living, dt)   # 더위·비 등 날씨가 동물 수치에 영향
         # 5) 자원 갱신 + 후처리(번식·사망 정리)
         for resource in self.resources:
             resource.update(self, dt)
-        self.regrow_plants(dt)
-        self.try_reproduce()
+        self.update_meerkat_ending(dt)        # 미어캣 엔딩(거대화·잠식) 진행
+        if not self.meerkat_ending:           # 잠식 중엔 풀 재생·일반 번식 정지(잠식 완료 가능)
+            self.regrow_plants(dt)
+            self.try_reproduce()
         self.flush_pending()
         self.check_end_conditions()
+
+    def apply_weather_effects(self, living, dt):
+        """날씨·온도가 동물 전반에 주는 영향:
+        - 더울수록(heat_factor) 갈증이 빨리 차고 기력 회복이 더뎌 쉽게 지친다.
+        - 가뭄(폭염)엔 체력이 닳지만, '잎이 무성한 나무 그늘' 아래면 더위를 피한다.
+        - 비·흐림(선선)엔 체력이 천천히 회복된다."""
+        env = self.environment
+        heat = env.heat_factor()
+        shade_trees = [p for p in self.plants if p.alive
+                       and isinstance(p, (AcaciaTree, BaobabTree)) and p.has_foliage()]
+        for a in living:
+            in_shade = False
+            if env.weather == "drought":
+                for t in shade_trees:
+                    if a.position.distance_to(t.position) <= t.radius + a.radius + 30:
+                        t.provide_shade(a)
+                        in_shade = True
+                        break
+            if heat > 0.0 and not in_shade:
+                a.thirst = min(100.0, a.thirst + heat * 1.4 * dt)
+                a.stamina = max(0.0, a.stamina - heat * 2.0 * dt)
+            if env.weather == "drought" and not in_shade:
+                a.health = max(1.0, a.health - 0.6 * dt)
+            elif env.weather in ("rain", "cloudy"):
+                a.health = min(a.max_health, a.health + 0.5 * dt)
 
     def apply_environment_events(self, dt):
         if self.environment.weather == "drought":
             if self.drought_event is None:
                 self.drought_event = DroughtEvent(random.uniform(0.5, 1.0))
             self.drought_event.dry_up_map(self, dt)
-        else:
-            self.drought_event = None
+            return
+        self.drought_event = None
+        if self.environment.weather == "rain":
+            # 비: 호숫가 물이 불고, 웅덩이도 차오르며, 가끔 새 웅덩이가 생긴다.
+            for lake in [t for t in self.terrains if isinstance(t, LakeSide)]:
+                lake.fill_rain(8.0 * dt)
+            for puddle in self.water_puddles():
+                puddle.regenerate(6.0 * dt)
+            if len(self.water_puddles()) < 8 and random.random() < 0.02 * dt * 60:
+                self._spawn_puddle()
+
+    def _spawn_puddle(self):
+        pos = self._clamp(self._side_spot(40), 30)
+        if self._blocked(pos):
+            return
+        puddle = WaterPuddle(pos, amount=random.uniform(60.0, 100.0))
+        self.resources.append(puddle)
+        # 새로 고인 물에 잠긴 풀은 사라진다(풀이 물 위로 비치지 않게).
+        for g in self.plants:
+            if g.alive and g.name == "Grass" and g.position.distance_to(pos) < puddle.radius:
+                g.die()
 
     def on_new_day(self):
         if self.environment.weather == "rain":
@@ -285,18 +351,30 @@ class World:
         """살아있는 풀이 씨앗을 퍼뜨려 가끔 주변에 새 풀이 자란다(계획서 spread_seeds).
         풀 공급이 끊겨 초원이 사막화되는 것을 막는다. 전체 풀 수는 상한으로 제한."""
         grasses = [p for p in self.plants if p.alive and p.name == "Grass"]
-        if len(grasses) >= 220:
+        if len(grasses) >= 85:                 # 상한 더 낮춰 듬성듬성 유지(과밀·물겹침 방지)
             return
-        for grass in grasses:
-            if random.random() < 0.09 * dt * 60:   # 초기 개수는 줄인 대신 번식 확률을 더 높여 빠르게 퍼짐(프레임레이트 무관)
-                grass.spread_seeds()
-                # 씨앗이 더 멀리까지 날아가, 점점 더 넓은 범위로 퍼져나가게 한다
-                offset = Vector2(random.uniform(-160, 160), random.uniform(-160, 160))
-                pos = self._clamp(grass.position + offset, 80)
-                if self._on_structure(pos):        # 구조물 위에는 안 자람
-                    break
-                self.plants.append(Grass(pos))
-                break
+        growth = self.environment.growth_multiplier()
+        if random.random() >= 0.9 * dt * growth:   # 천천히(≈초당 0.9·growth회만 시도)
+            return
+        # 분포 유지: 대개 '사이드 군집' 근처에 돋아 군집을 살리고, 가끔만 중앙에 1포기.
+        if random.random() < 0.18:
+            pos = Vector2(random.uniform(self.width * 0.34, self.width * 0.66),
+                          random.uniform(40, self.height - 40))
+        else:
+            side = [g for g in grasses
+                    if g.position.x < self.width * 0.33 or g.position.x > self.width * 0.67]
+            if side:
+                parent = random.choice(side)
+                off = Vector2(random.uniform(28.0, 70.0), 0.0).rotate(random.uniform(0, 360))
+                pos = parent.position + off
+            else:
+                pos = self._side_spot(30)
+        pos = self._clamp(pos, 18)
+        m = 40.0
+        if not (m <= pos.x <= self.width - m and m <= pos.y <= self.height - m):
+            return
+        if not self._grass_blocked(pos):
+            self.plants.append(Grass(pos))
 
     def try_reproduce(self):
         """피식자/잡식이 안전·포만 상태이고 같은 종이 가까우면 낮은 확률로 번식."""
@@ -338,12 +416,39 @@ class World:
                 other.velocity = bounce_dir * power
                 other.desired_velocity = bounce_dir * power
 
+    def update_meerkat_ending(self, dt):
+        """MEERKAT_ENDING_DAY 를 넘기면 미어캣들이 서서히 거대해지며(크기·체력·공격·속도)
+        모든 동물·식물·나무를 잡아먹는다. 잠식이 진행되는 '연출'을 위해 점진적으로 성장한다."""
+        meerkats = [a for a in self.living_animals() if a.name == "Meerkat"]
+        if not meerkats:
+            return
+        if self.environment.day < MEERKAT_ENDING_DAY:
+            # 엔딩 전: 크기만 아주 조금씩 커진다(스탯·행동 변화 없음)
+            for m in meerkats:
+                m.draw_scale = min(1.4, m.draw_scale + dt * 0.006)
+            return
+        self.meerkat_ending = True
+        for m in meerkats:
+            m.apocalypse = True
+            g = min(1.0, getattr(m, "_grow", 0.0) + dt * MEERKAT_GROW_PER_SEC)  # 0→1 서서히
+            m._grow = g
+            m.draw_scale = 1.4 + g * 3.1       # 화면 크기 최대 ~4.5배(이전 7배에서 축소)
+            m.radius = 13.0 + g * 40.0
+            m.power = 5.0 + g * 55.0
+            m.speed = 82.0 + g * 60.0
+            m.detect_range = 130.0 + g * 550.0
+            m.max_health = 42.0 + g * 450.0
+            m.health = m.max_health            # 잠식자는 무적에 가깝게 — 굶거나 지치지 않음
+            m.hunger = m.thirst = 0.0
+            m.stamina = 100.0
+
     def check_end_conditions(self):
-        # 가뭄이 3일 이상 이어져 물이 마르면 종료
-        if self.environment.weather == "drought" and self.environment.day >= 3:
-            if sum(p.amount for p in self.water_puddles()) <= 2:
+        # 미어캣 엔딩: 거대 미어캣이 다른 모든 동물·식물(나무 포함)을 잠식하면 종료
+        if self.meerkat_ending:
+            others = [a for a in self.living_animals() if a.name != "Meerkat"]
+            if not others and not self.alive_plants():
                 self.environment.ended = True
-                self.environment.end_reason = "가뭄으로 물이 말라 생태계가 종료되었습니다."
+                self.environment.end_reason = "미어캣이 초원의 모든 것을 집어삼켰습니다 - 미어캣 엔딩"
 
     # ── 생성/사망 ────────────────────────────────────────────────────────
     def spawn_carcass(self, animal):
@@ -388,25 +493,46 @@ class World:
                 best, nearest = d, item
         return nearest
 
-    def nearest_plant(self, position):
-        return self._nearest(self.plants, position)
+    def nearest_plant(self, position, max_distance=None):
+        return self._nearest(self.plants, position, max_distance=max_distance)
 
     def nearest_bush(self, position, max_distance):
         return self._nearest(self.plants, position,
                              lambda p: isinstance(p, Bush), max_distance)
 
-    def nearest_carcass(self, position):
-        return self._nearest(self.carcasses(), position,
-                             lambda c: c.carried_by is None)
+    def nearest_tree(self, position, max_distance=None, need_foliage=False):
+        """가장 가까운 나무(아카시아·바오밥). need_foliage 면 잎이 충분한 나무만."""
+        def ok(p):
+            if not isinstance(p, (AcaciaTree, BaobabTree)):
+                return False
+            return p.has_foliage() if need_foliage else True
+        return self._nearest(self.plants, position, ok, max_distance)
 
-    def nearest_water(self, position):
+    def nearest_carcass(self, position, max_distance=None):
+        return self._nearest(self.carcasses(), position,
+                             lambda c: c.carried_by is None, max_distance)
+
+    def nearest_water(self, position, max_distance=None):
         candidates = list(self.water_puddles()) + \
             [t for t in self.terrains if isinstance(t, LakeSide)]
-        return self._nearest(candidates, position)
+        return self._nearest(candidates, position, max_distance=max_distance)
+
+    def nearest_weak_or_prey(self, hunter, max_distance):
+        """잡식(혹멧돼지)의 사냥 대상: 탐지범위 안의 초식·잡식, 또는 '약한' 육식(체력 50%↓).
+        코끼리와 같은 종, 자기 자신은 제외."""
+        def ok(a):
+            if a is hunter or a.name == hunter.name or a.name == "Elephant":
+                return False
+            if a.diet_type in ("herbivore", "omnivore"):
+                return True
+            return a.diet_type == "carnivore" and a.health < a.max_health * 0.5
+        return self._nearest(self.animals, hunter.position, ok, max_distance)
 
     def nearest_predator(self, animal, max_distance):
+        # 덤불에 숨은(is_hidden) 포식자는 피식자에게 보이지 않는다 → 기습 성립
         return self._nearest(self.animals, animal.position,
-                             lambda a: a is not animal and a.diet_type == "carnivore",
+                             lambda a: a is not animal and a.diet_type == "carnivore"
+                                       and not a.is_hidden,
                              max_distance)
 
     def nearest_prey_for(self, predator, max_distance):
@@ -423,6 +549,16 @@ class World:
     def nearest_same_species(self, animal, radius):
         return self._nearest(self.animals, animal.position,
                              lambda a: a is not animal and a.name == animal.name, radius)
+
+    def nearest_devour_target(self, meerkat):
+        """미어캣 엔딩용: 미어캣이 먹어 치울 가장 가까운 대상(자기 외 모든 동물 + 모든 식물·나무)."""
+        prey = self._nearest(self.animals, meerkat.position,
+                             lambda a: a is not meerkat and a.name != "Meerkat")
+        plant = self._nearest(self.plants, meerkat.position)
+        cands = [c for c in (prey, plant) if c is not None]
+        if not cands:
+            return None
+        return min(cands, key=lambda c: meerkat.position.distance_to(c.position))
 
     def nearest_terrain_type(self, terrain_name, position):
         return self._nearest(self.terrains, position,

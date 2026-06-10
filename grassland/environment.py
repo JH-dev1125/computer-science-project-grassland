@@ -8,13 +8,18 @@ import random
 from grassland.config import DAY_LENGTH_HOURS, GAME_HOURS_PER_SECOND
 
 
+WEATHER_PERIOD_HOURS = 6   # 날씨·온도가 바뀌는 주기(게임 내 시간) — 하루 4번 바뀐다
+
+
 class Environment:
-    """게임 내 시간·날씨·온도와 종료 여부를 관리."""
+    """게임 내 시간·날씨·온도와 종료 여부를 관리.
+    날씨/온도는 게임 내 6시간마다 바뀌고, growth/heat/combat 계수로 동·식물에 영향을 준다."""
     def __init__(self):
         self.day = 1
         self.time = 6.0            # 6시=아침
         self.weather = "sunny"     # sunny / cloudy / rain / drought
         self.temperature = 28
+        self._weather_hours = 0.0  # 마지막 날씨 변경 이후 누적 시간
         self.ended = False
         self.end_reason = ""
 
@@ -26,14 +31,16 @@ class Environment:
 
     def change_time(self, hours):
         self.time += hours
+        # 6시간마다 날씨·온도 변경(날짜와 독립)
+        self._weather_hours += hours
+        while self._weather_hours >= WEATHER_PERIOD_HOURS:
+            self._weather_hours -= WEATHER_PERIOD_HOURS
+            self.change_weather()
+            self.change_temp()
+        # 자정을 넘기면 날짜만 증가
         while self.time >= DAY_LENGTH_HOURS:
             self.time -= DAY_LENGTH_HOURS
-            self.change_day()
-
-    def change_day(self):
-        self.day += 1
-        self.change_weather()
-        self.change_temp()
+            self.day += 1
 
     def change_weather(self):
         self.weather = random.choice(["sunny", "cloudy", "rain", "drought"])
@@ -47,6 +54,19 @@ class Environment:
             self.temperature = random.randint(23, 31)
         else:
             self.temperature = random.randint(27, 36)
+
+    # ── 동·식물에 주는 영향 계수(다른 시스템이 읽어 곱해 쓴다) ──────────
+    def growth_multiplier(self):
+        """식물 성장·번식 속도 배율. 비 오면 쑥쑥, 가뭄이면 시든다."""
+        return {"rain": 1.9, "cloudy": 1.15, "sunny": 1.0, "drought": 0.35}[self.weather]
+
+    def heat_factor(self):
+        """더위 강도(0~). 26도에서 0, 더울수록 커진다 → 갈증·기력 소모를 키운다."""
+        return max(0.0, (self.temperature - 26) / 12.0)
+
+    def combat_factor(self):
+        """전투력 배율. 무더운 가뭄엔 늘어져 공격이 약해지고, 선선하면 정상~약간 강."""
+        return {"rain": 1.05, "cloudy": 1.0, "sunny": 1.0, "drought": 0.85}[self.weather]
 
     def clock_text(self):
         """'HH:MM' 형식 (UI 표시용)."""

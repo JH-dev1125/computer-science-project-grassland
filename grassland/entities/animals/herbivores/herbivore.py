@@ -47,11 +47,11 @@ class Herbivore(Animal):
         if self.reproduce_cooldown > 0:
             self.reproduce_cooldown = max(0.0, self.reproduce_cooldown - dt)
         if not self.is_chased and self.hunger < 40.0:
-            self.heal()
+            self.heal(dt)
         if not self.is_chased:
             self.stress = max(0.0, self.stress - 5.0 * dt)
         if not self.behave(world, dt):
-            self.wander(dt)
+            self.wander(world, dt)
 
     def behave(self, world: "World", dt: float) -> bool:
         threat = world.nearest_predator(self, self.panic_range)
@@ -75,16 +75,16 @@ class Herbivore(Animal):
                 self.fight_or_flight(threat, world, dt)
             else:
                 self.interaction_target = None
-                self.move_away_from(self._last_threat_pos, self.flee_speed)
-                self.action_text = "flee"
+                self.evade(self._last_threat_pos, self.flee_speed, dt)
             return True
         return self.seek_water_if_needed(world) or self.seek_plants_if_needed(world)
 
     def can_hide_in_bush(self) -> bool:
         return False
 
-    def heal(self) -> None:
-        self.health = min(self.max_health, self.health + 3.0)
+    def heal(self, dt: float) -> None:
+        # 초당 회복(예전엔 프레임당 +3 = 초당 180 으로 비정상적으로 빨랐다)
+        self.health = min(self.max_health, self.health + 4.0 * dt)
 
     def fight_or_flight(
         self, threat: Animal, world: Optional["World"], dt: float
@@ -95,7 +95,6 @@ class Herbivore(Animal):
             self.lose_energy(10.0 * dt)
             self.action_text = "fight"
         else:
-            self.move_away_from(threat.position, self.flee_speed)
+            self.evade(threat.position, self.flee_speed, dt)
             self.lose_energy(8.0 * dt)
-            self.action_text = "flee"
 

@@ -1,9 +1,9 @@
 # =============================================================================
-# entities/terrain/terrain_base.py — 모든 지형의 부모 (계획서 Terrain)
+# entities/terrain/terrain.py — 모든 지형의 부모 (계획서 Terrain)
 # 속성: (x,y)=position, size  /  메서드: contains(), give_effect()
 # 지형은 통과 가능(solid=False)하며 '원 안에 들어오면 효과'를 준다.
 # =============================================================================
-from grassland.entities.base import Entity
+from grassland.entities.entity import Entity
 
 
 class Terrain(Entity):

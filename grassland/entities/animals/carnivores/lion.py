@@ -9,6 +9,8 @@ class Lion(Carnivore):
     def __init__(self, position):
         super().__init__("Lion", position, (207, 157, 74),
                          health=120.0, speed=84.0, power=22.0, detect_range=170.0)
+        self.thirst_limit = 70.0
+        self.food_range = 130.0        # 사체 탐지 — 독점 방지(detect_range=170)
         self.hunt_stamina_cost = 17.0
         self.acceleration = 48.0
         self.mane_size = 1.0
@@ -48,7 +50,7 @@ class Lion(Carnivore):
             if prey is not None and not self._elephant_near(world, prey.position):
                 self.hunt(prey, world, dt)
                 return True
-            carcass = world.nearest_carcass(self.position)
+            carcass = world.nearest_carcass(self.position, self.food_range)
             if carcass is not None and not self._elephant_near(world, carcass.position):
                 self.interaction_target = carcass
                 if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
@@ -58,7 +60,7 @@ class Lion(Carnivore):
                     self.move_toward(carcass.position, self.speed * 0.75)
                     self.action_text = "carcass"
                 return True
-        return False
+        return self.ambush(world, dt)   # 먹이가 안 보이면 덤불에 숨어 기습 시도
 
     def roar(self, world):
         """포효: 일정 범위 내 Zebra 의 panic 을 유발(직접 안 보여도 경계↑)."""

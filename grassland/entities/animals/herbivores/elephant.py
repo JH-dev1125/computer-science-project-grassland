@@ -22,10 +22,14 @@ if TYPE_CHECKING:
 class Elephant(Herbivore):
     def __init__(self, position: Vector2):
         # power 를 낮춰 '쫓아내는' 방어동물로(예전 28 은 포식자를 즉사시켰다).
+        # speed 를 올려(34→62) 큰 몸집이 한자리에 멈춰 '벽'이 되어 길을 막지 않게 한다.
         super().__init__(
-            "Elephant", position, (132, 132, 123), 165.0, 34.0, 11.0, 150.0
+            "Elephant", position, (132, 132, 123), 165.0, 62.0, 11.0, 150.0
         )
         self.radius = 28.0
+        self.thirst_limit = 48.0   # 코끼리는 물을 많이·자주 마신다
+        self.food_range = 120.0        # 나무·풀 탐지(detect_range=150)
+        self._roam_chance = 0.75   # 자주 먼 곳을 목적지로 잡아 꾸준히 맵을 돌아다닌다(정체 방지)
 
     @property
     def is_hidden(self):
@@ -35,12 +39,32 @@ class Elephant(Herbivore):
     def is_hidden(self, value):
         pass
 
+    # 멀리 있는 포식자엔 반응하지 않고 계속 어슬렁댄다(가까이 와야 맞섬) — 멀리서부터 멈춰
+    # '벽'처럼 길을 막던 문제 해결. 포식자는 코끼리를 피하므로 평소엔 거의 늘 움직인다.
+    GUARD_RANGE = 90.0
+
     def behave(self, world: "World", dt: float) -> bool:
-        threat = world.nearest_predator(self, self.panic_range)
+        threat = world.nearest_predator(self, self.GUARD_RANGE)
         if threat is not None:
             self.fight_or_flight(threat, world, dt)
             return True
-        return self.seek_water_if_needed(world) or self.seek_plants_if_needed(world)
+        if self.seek_water_if_needed(world):
+            return True
+        # 코끼리는 나무 잎을 즐겨 뜯어 먹는다(탐지범위 안 잎 무성한 나무로)
+        if self.hunger > 40.0:
+            tree = world.nearest_tree(self.position, self.detect_range, need_foliage=True)
+            if tree is not None:
+                self.interaction_target = tree
+                if self.distance_to(tree) <= self.radius + tree.radius + 12:
+                    if self._feed_ready():
+                        eaten = tree.eat_leaves(10.0)
+                        self.hunger = max(0.0, self.hunger - eaten)
+                    self.stop()
+                else:
+                    self.move_toward(tree.position, self.speed * 0.7)
+                self.action_text = "browse"
+                return True
+        return self.seek_plants_if_needed(world)
 
     @property
     def health(self):

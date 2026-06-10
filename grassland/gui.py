@@ -20,7 +20,10 @@ from grassland.config import (
     PANEL_BORDER, PANEL_COLOR, SCREEN_HEIGHT, SCREEN_WIDTH, SKY_BAND_HEIGHT,
     SPRITE_DISPLAY_DEFAULT, SPRITE_DISPLAY_SIZE, TEXT_COLOR, WEATHER_TINT,
 )
-from grassland.sprites import get_sprite, get_background, get_sky_image, get_weather_icon
+from grassland.sprites import (
+    get_sprite, trimmed, get_background, get_sky_image,
+    get_weather_icon, sprite_exists, scale_longest,
+)
 from pygame.math import Vector2
 
 
@@ -130,12 +133,141 @@ class GrasslandApp:
         base = SPRITE_DISPLAY_SIZE.get(entity.name, SPRITE_DISPLAY_DEFAULT)
         return int(base * entity.draw_scale)
 
-    def blit_sprite(self, entity, x, y, flip=False, anchor="center"):
+    # ── 행동 애니메이션 설정 ──────────────────────────────────────────────
+    # 동물 name → { "actions": {action_text → 상태},  "states": {상태 → (프레임목록, 프레임당 초)} }
+    #   - 프레임목록: 파일이 없는 프레임은 자동으로 걸러지고, 모두 없으면 idle(<name>) 로 폴백.
+    #   - 프레임당 초: 클수록 천천히 바뀐다(걷기 0.30s ≈ 자연스러운 속보, 질주는 더 빠르게).
+    #   - 같은 동물의 모든 프레임은 '같은 축척'으로 그려진다(sprites.trimmed 가 여백을 잘라 정규화).
+    #   - 동물은 idle 그림을 '걷기 0프레임(walk0)'으로 보고 walk1 과 번갈아 걷는다(독수리 제외).
+    # 크기 정규화 모드(blit_sprite): 기본 geom(면적, 자세가 달라도 덩치 일정).
+    # 독수리만 height(날갯짓 때 가로폭만 변하도록).
+    NORM_MODE = {"Bald_Eagle": "height"}
+
+    ANIMATIONS = {
+        "Lion": {
+            "actions": {"hunt": "hunt", "attack": "hunt", "ambush": "hunt",
+                        "roar": "roar", "hide": "hide",
+                        "avoid": "walk", "carcass": "walk", "return": "walk", "stalk": "walk",
+                        "rest": "idle", "eat_carcass": "idle", "watch": "idle"},
+            "states": {"walk": (["lion", "lion_walk1"], 0.25),
+                       "hunt": (["lion_hunt1", "lion_hunt2"], 0.18),
+                       "roar": (["lion_roar"], 1.0), "hide": (["lion_hide"], 1.0),
+                       "idle": (["lion"], 1.0)},
+        },
+        "Hyena": {
+            "actions": {"hunt": "hunt", "attack": "hunt", "steal_rush": "hunt", "ambush": "hunt",
+                        "steal": "steal",
+                        "avoid": "walk", "carcass": "walk", "return": "walk", "stalk": "walk",
+                        "rest": "idle", "eat_carcass": "idle", "watch": "idle"},
+            "states": {"walk": (["hyena", "hyena_walk1"], 0.25),
+                       "hunt": (["hyena_hunt1", "hyena_hunt2"], 0.16),
+                       "steal": (["hyena_steal_prey"], 1.0), "idle": (["hyena"], 1.0)},
+        },
+        "Bald_Eagle": {   # 독수리는 idle 대신 날갯짓 두 프레임(fly1↑/fly2↓)을 번갈아 쓴다
+            "actions": {"fly": "fly", "carcass": "fly",
+                        "swoop": "swoop", "land": "land", "eat_carcass": "land"},
+            "states": {"fly": (["bald_eagle_fly1", "bald_eagle_fly2"], 0.30),
+                       "swoop": (["bald_eagle_swoop"], 1.0),
+                       "land": (["bald_eagle_land"], 1.0), "idle": (["bald_eagle"], 1.0)},
+        },
+        "Elephant": {
+            "actions": {"stomp": "stomp", "guard": "idle", "tired": "idle",
+                        "graze": "walk", "water": "walk", "roam": "walk",
+                        "wander": "walk", "return": "walk", "watch": "idle"},
+            "states": {"walk": (["elephant", "elephant_walk1"], 0.32),
+                       "stomp": (["elephant_stomp"], 1.0), "idle": (["elephant"], 1.0)},
+        },
+        "Gazelle": {
+            "actions": {"flee": "flee", "zigzag": "flee",
+                        "graze": "walk", "water": "walk", "roam": "walk",
+                        "wander": "walk", "watch": "idle"},
+            "states": {"walk": (["gazelle", "gazelle_walk1"], 0.22),
+                       "flee": (["gazelle_flee", "gazelle_walk1"], 0.12),
+                       "idle": (["gazelle"], 1.0)},
+        },
+        "Zebra": {
+            "actions": {"kick": "kick", "flee": "flee", "fight": "kick",
+                        "graze": "walk", "water": "walk", "roam": "walk",
+                        "wander": "walk", "watch": "alert"},
+            "states": {"walk": (["zebra", "zebra_walk1"], 0.24),
+                       "flee": (["zebra", "zebra_walk1"], 0.12),
+                       "kick": (["zebra_kick"], 1.0), "alert": (["zebra_alert"], 1.0),
+                       "idle": (["zebra"], 1.0)},
+        },
+        "Meerkat": {
+            "actions": {"stand": "stand", "hide": "hide",
+                        "cave": "cave", "return": "cave",
+                        "forage": "walk", "graze": "walk", "water": "walk", "drink": "walk",
+                        "roam": "walk", "wander": "walk", "flee": "walk",
+                        "hunt": "walk", "devour": "walk", "watch": "idle"},
+            "states": {"walk": (["meerkat_walk"], 1.0),
+                       "stand": (["meerkat_stand"], 1.0),
+                       "cave": (["meerkat_cave"], 1.0),
+                       "hide": (["meerkat_hide"], 1.0),
+                       "idle": (["meerkat"], 1.0)},
+        },
+    }
+
+    def _animation(self, entity):
+        """이 동물의 현재 상태에 맞는 (프레임이름 리스트, 프레임당 지속시간[초]).
+        action_text → 상태 매핑이 있으면 그걸 쓰고, 없으면 이동속도로 walk/idle 을 고른다.
+        실제 파일이 없는 프레임은 제거하고, 하나도 없으면 idle(기본 이미지)로 폴백한다."""
+        base = entity.name.lower()
+        cfg = self.ANIMATIONS.get(entity.name)
+        action = getattr(entity, "action_text", "") or ""
+        state = None
+        if cfg:
+            state = cfg["actions"].get(action)
+        if state is None:
+            speed = entity.velocity.length() if hasattr(entity, "velocity") else 0.0
+            state = "walk" if speed > 12.0 else "idle"
+        if cfg and state in cfg["states"]:
+            frames, dur = cfg["states"][state]
+        elif state == "walk":
+            # 설정에 없는 동물: idle 그림(walk0)과 walk1·walk2 를 번갈아 걷는다.
+            frames, dur = ([base, base + "_walk1", base + "_walk2"], 0.26)
+        else:
+            frames, dur = ([base], 1.0)
+        frames = [f for f in frames if sprite_exists(f)] or [base]
+        return frames, dur, state
+
+    def _frame(self, entity, dt):
+        """프레임 타이머를 진전시켜 지금 그릴 프레임 이름을 고른다. 상태가 바뀌면
+        타이머를 초기화해 새 동작이 처음 프레임부터 자연스럽게 시작되도록 한다."""
+        frames, dur, state = self._animation(entity)
+        if getattr(entity, "_anim_state", None) != state:
+            entity._anim_state = state
+            entity._anim_timer = 0.0
+            entity._anim_index = 0
+        if len(frames) <= 1:
+            return frames[0]
+        entity._anim_timer = getattr(entity, "_anim_timer", 0.0) + dt
+        if entity._anim_timer >= dur:
+            entity._anim_timer -= dur
+            entity._anim_index = getattr(entity, "_anim_index", 0) + 1
+        return frames[entity._anim_index % len(frames)]
+
+    def blit_sprite(self, entity, x, y, flip=False, anchor="center", sprite_name=None):
         """entity 의 PNG 를 그린다. anchor="bottom" 이면 '발밑'을 (x,y)에 맞춰 위로 세워
         그린다(오블리크 2.5D — 물체가 바닥을 딛고 서 있는 느낌). "center" 면 바닥에
-        누운 것(호숫가·웅덩이). 그린 사각형(Rect)을 돌려준다(체력바 위치 계산용)."""
+        누운 것(호숫가·웅덩이). 그린 사각형(Rect)을 돌려준다(체력바 위치 계산용).
+
+        동물은 '내용 기준'(투명 여백을 잘라낸 실제 그림)으로 크기를 맞춰, 프레임마다
+        캔버스 크기·여백이 달라도 화면상 동물 크기가 항상 일정하고 발밑이 정확히 맞는다.
+        그 외(식물·지형)는 기존 캔버스 기준으로 그린다."""
+        base = entity.name.lower()
+        name = sprite_name or base
         size = self.display_size(entity)
-        sprite = get_sprite(entity.name.lower(), size)
+        is_animal = getattr(entity, "kind", "") == "animal"
+        if is_animal:
+            # 독수리는 날개를 폈다 접었다 해 가로폭만 변하므로 '키(height)' 기준으로 맞춰
+            # 모든 비행 프레임의 몸통 크기를 똑같이 한다. 나머지 동물은 면적(geom) 기준.
+            mode = self.NORM_MODE.get(entity.name, "geom")
+            sprite = trimmed(name, size, mode)
+            if sprite is None:                      # 프레임 파일이 없으면 idle 로 폴백
+                sprite = trimmed(base, size, mode)
+        else:
+            sprite = get_sprite(name, size)
         if sprite is None:
             r = max(4, size // 5)
             pygame.draw.circle(self.screen, (210, 60, 210), (x, y), r)
@@ -163,7 +295,7 @@ class GrasslandApp:
         pygame.draw.ellipse(shadow, (20, 20, 20, fade), shadow.get_rect())
         self.screen.blit(shadow, shadow.get_rect(center=(x, y)))
 
-    def _entity_lift(self, entity):
+    def _lift(self, entity):
         """이 동물을 그릴 때 발밑 좌표(world_to_screen 결과)에서 위로 들어 올리는
         픽셀 수 — altitude(고도) + bounce(통통 튀는 모션). 그림자는 원래 발밑
         좌표에 그대로 그리지만, 선택 고리·상호작용 선처럼 '동물 자체'를 가리키는
@@ -187,6 +319,7 @@ class GrasslandApp:
         # 세계: 동물·구조물을 발밑 기준·깊이순으로. 동물은 top_margin 으로 하늘에 못 감.
         self.draw_world()
         self.draw_weather_tint()                  # 날씨 틴트
+        self.draw_rain()                          # 비 내리는 묘사(비 올 때만)
         self.draw_ui()                            # 정보 패널(좌하단)
         self.draw_selection_panel()                # 선택한 몹의 속성 패널(우상단)
         pygame.display.flip()
@@ -243,12 +376,24 @@ class GrasslandApp:
             x, y = self.world_to_screen(e.position)
             self.blit_sprite(e, x, y, anchor="center")
 
-        # 2) 서 있는 것(동굴·식물·동물)을 '발밑 y' 기준으로 정렬 — 앞의 것이 뒤를 가린다.
+        # 1.5) 풀(Grass): 작은 장식용 깔개라 깊이 정렬에 끼우면 동물 바로 앞에 있을 때
+        #      발밑부터 솟아올라 큰 동물(코끼리)의 몸통을 '뚫고' 가리는 것처럼 보인다.
+        #      그래서 풀은 동물·나무보다 항상 먼저(뒤에) 깔아, 몸통을 뚫지 않게 한다.
+        #      (덤불 Bush 는 은신처라 깊이 정렬을 유지 → 아래 upright 에 남겨둔다.)
+        grasses = [p for p in self.world.alive_plants()
+                   if p.name == "Grass" and self.visible(p)]
+        grasses.sort(key=lambda e: e.position.y)
+        for e in grasses:
+            x, y = self.world_to_screen(e.position)
+            self.blit_sprite(e, x, y, anchor="bottom")
+
+        # 2) 서 있는 것(동굴·덤불·동물)을 '발밑 y' 기준으로 정렬 — 앞의 것이 뒤를 가린다.
         upright = []
         for t in self.world.terrains:
             if t.name == "Cave" and self.visible(t, 200):
                 upright.append(t)
-        upright.extend(p for p in self.world.alive_plants() if self.visible(p))
+        upright.extend(p for p in self.world.alive_plants()
+                       if p.name != "Grass" and self.visible(p))
         upright.extend(a for a in self.world.animals if a.alive and self.visible(a))
         upright.sort(key=lambda e: e.position.y)
         for e in upright:
@@ -258,7 +403,9 @@ class GrasslandApp:
                 if not hasattr(e, '_flip_cooldown'):
                     e._flip_cooldown = 0.0
                 e._flip_cooldown = max(0.0, e._flip_cooldown - dt)
-                dvx = e.desired_velocity.x
+                # 바라보는 방향은 '실제 이동 속도'를 따른다(가고 싶은 방향 X).
+                # 벽 근처에서 가장자리 회피로 안쪽으로 꺾이면 얼굴도 안쪽을 향하게 된다.
+                dvx = e.velocity.x
                 if e._flip_cooldown <= 0.0:
                     if dvx > 8:
                         e.facing_left = False
@@ -267,12 +414,12 @@ class GrasslandApp:
                         e.facing_left = True
                         e._flip_cooldown = 0.4
                 altitude = getattr(e, "altitude", 0.0)
-                total_lift = self._entity_lift(e)
-                if altitude > 0.5:
-                    self.draw_shadow(e, x, y, altitude)
+                total_lift = self._lift(e)
+                self.draw_shadow(e, x, y, altitude)   # 모든 동물 발밑에 그림자(altitude 클수록 작고 옅게)
+                frame = self._frame(e, dt)
                 rect = self.blit_sprite(e, x, y - total_lift, flip=not getattr(e, "facing_left", True),
-                                        anchor="bottom")
-                self.health_bar(e, x, rect.top - 6, self.display_size(e))
+                                        anchor="bottom", sprite_name=frame)
+                self.healthbar(e, x, rect.top - 6, self.display_size(e))
                 if e is self.selected:   # 선택된 몹은 '보이는' 발밑(들어 올려진 위치)에 고리를 그려 표시
                     rw = max(rect.width, 30)
                     ring = pygame.Rect(0, 0, rw + 14, (rw + 14) // 3)
@@ -319,13 +466,13 @@ class GrasslandApp:
                 continue
             ax, ay = self.world_to_screen(animal.position)
             tx, ty = self.world_to_screen(target.position)
-            ay -= self._entity_lift(animal)   # 떠 있는 동물은 '보이는' 몸통에서 선이 시작·도착하도록
-            ty -= self._entity_lift(target)
+            ay -= self._lift(animal)   # 떠 있는 동물은 '보이는' 몸통에서 선이 시작·도착하도록
+            ty -= self._lift(target)
             color = self._INTERACTION_COLORS.get(
                 getattr(animal, "action_text", ""), (200, 200, 200))
             pygame.draw.line(self.screen, color, (ax, ay), (tx, ty), 2)
 
-    def health_bar(self, animal, x, y, width):
+    def healthbar(self, animal, x, y, width):
         """동물 머리 위 체력바. 비율(0~1)에 따라 길이와 색이 바뀐다(초록→노랑→빨강)."""
         mx = animal.max_health if animal.max_health > 0 else 1.0
         ratio = max(0.0, min(1.0, animal.health / mx))
@@ -369,16 +516,24 @@ class GrasslandApp:
             ratio = self.CLOUD_BASE_W / max(1, w)
             new_size = (self.CLOUD_BASE_W, max(1, round(h * ratio)))
             self._cloud_imgs.append(pygame.transform.smoothscale(im, new_size))
-        self.clouds = []
-        for _ in range(5):
-            self.clouds.append({
-                "x": _r.uniform(0, self.world.width),      # 월드 px (가로 위치) — 카메라와 함께 흐름
-                "yf": _r.uniform(0.08, 0.55),              # 하늘 띠 높이 대비 비율
-                "speed": _r.uniform(6.0, 16.0),            # px/초 (오른쪽으로 흐름, 월드 기준)
-                "scale": _r.uniform(0.7, 1.15),
-                "base": _r.choice(self._cloud_imgs),       # 이 구름이 쓸 원본 그림
-                "img": None,
-            })
+        self.clouds = [self._new_cloud() for _ in range(5)]
+        # 비 입자(화면 좌표). 비 올 때만 그린다. [x, y, 낙하속도]
+        self.raindrops = [[_r.uniform(0, self.screen_width), _r.uniform(0, self.screen_height),
+                           _r.uniform(650, 950)] for _ in range(240)]
+
+    # 날씨별 목표 구름 수 — 흐림·비엔 하늘을 구름으로 빽빽하게.
+    CLOUD_COUNTS = {"sunny": 3, "cloudy": 8, "rain": 11, "drought": 2}
+
+    def _new_cloud(self, x=None):
+        import random as _r
+        return {
+            "x": _r.uniform(0, self.world.width) if x is None else x,
+            "yf": _r.uniform(0.08, 0.55),              # 하늘 띠 높이 대비 비율
+            "speed": _r.uniform(6.0, 16.0),            # px/초 (오른쪽으로 흐름, 월드 기준)
+            "scale": _r.uniform(0.7, 1.15),
+            "base": _r.choice(self._cloud_imgs),       # 이 구름이 쓸 원본 그림
+            "img": None,
+        }
 
     @staticmethod
     def _make_cloud_surface():
@@ -392,9 +547,15 @@ class GrasslandApp:
         return surf
 
     def update_sky(self, dt):
-        """구름을 흐르게 한다(월드 좌표 기준. 월드 끝을 넘어가면 반대쪽에서, 모양도 새로 골라 등장)."""
+        """구름을 흐르게 하고, 날씨에 맞춰 구름 수를 서서히 맞춘다(흐림·비엔 더 많게)."""
         import random as _r
         margin = 220
+        # 날씨별 목표 구름 수로 조금씩 수렴(한 프레임에 ±1)
+        target = self.CLOUD_COUNTS.get(self.world.environment.weather, 5)
+        if len(self.clouds) < target:
+            self.clouds.append(self._new_cloud(x=-margin))   # 왼쪽에서 흘러 들어옴
+        elif len(self.clouds) > target:
+            self.clouds.pop()
         for c in self.clouds:
             c["x"] += c["speed"] * dt
             if c["x"] > self.world.width + margin:
@@ -511,7 +672,7 @@ class GrasslandApp:
         # 띠 안에서 호를 그리며 정오/자정에 가장 높다.
         y = int(band_h * 0.62 - math.sin(frac * math.pi) * band_h * 0.42)
         if img is not None:
-            scaled = self._sky_disc(img, size)
+            scaled = self._disc(img, size)
             self.screen.blit(scaled, (x - scaled.get_width() // 2, y - scaled.get_height() // 2))
             return
         for i, r in enumerate((44, 36, 28)):
@@ -522,19 +683,15 @@ class GrasslandApp:
         pygame.draw.circle(disc, (*color, 255), (22, 22), 20)
         self.screen.blit(disc, (x - 22, y - 22))
 
-    def _sky_disc(self, img, size):
+    def _disc(self, img, size):
         """해/달 그림을 size(긴 변, px)에 맞춰 한 번만 키워 캐시한다."""
-        cache = getattr(self, "_sky_disc_cache", None)
+        cache = getattr(self, "_disc_cache", None)
         if cache is None:
-            cache = self._sky_disc_cache = {}
+            cache = self._disc_cache = {}
         key = (id(img), size)
         scaled = cache.get(key)
         if scaled is None:
-            w, h = img.get_size()
-            scale = size / max(w, h)
-            new_size = (max(1, round(w * scale)), max(1, round(h * scale)))
-            scaled = pygame.transform.smoothscale(img, new_size)
-            cache[key] = scaled
+            scaled = cache[key] = scale_longest(img, size)
         return scaled
 
     # ── 몹 클릭 선택 ─────────────────────────────────────────────────────
@@ -556,6 +713,16 @@ class GrasslandApp:
             d = draw_pos.distance_to(click_pos)
             if d <= r and (best_d is None or d < best_d):
                 best, best_d = a, d
+        # 동물이 없으면 지형(평지 제외)·자원·식물도 클릭해 속성을 볼 수 있다
+        if best is None:
+            others = [t for t in self.world.terrains if t.name != "Plain"]
+            others += [r for r in self.world.resources if r.alive]
+            others += [p for p in self.world.plants if p.alive]
+            for e in others:
+                r = max(self.display_size(e) / 2, getattr(e, "radius", 10))
+                d = e.position.distance_to(click_pos)
+                if d <= r and (best_d is None or d < best_d):
+                    best, best_d = e, d
         if best is not None:
             self.selected = None if best is self.selected else best
             self.clicked_point = None        # 몹을 선택했으면 지점 표시는 끔
@@ -563,22 +730,44 @@ class GrasslandApp:
             self.selected = None
             self.clicked_point = click_pos    # 빈 곳 클릭 → 그 지점의 월드 좌표 기억
 
+    def _entity_info_lines(self, e):
+        """동물이 아닌 개체(지형·자원·식물)의 속성 줄 목록 — 가진 속성만 골라 보여준다."""
+        lines = [f"{e.name}  (#{e.id})",
+                 f"좌표: ({e.position.x:.0f}, {e.position.y:.0f})",
+                 f"종류: {e.kind}"]
+        if hasattr(e, "max_health"):
+            lines.append(f"체력: {e.health:.0f} / {e.max_health:.0f}")
+        if hasattr(e, "amount"):
+            lines.append(f"남은 양: {e.amount:.0f} / {e.max_amount:.0f}")
+        if hasattr(e, "water"):
+            lines.append(f"물의 양: {e.water:.0f} / {e.max_water:.0f}")
+        if hasattr(e, "leaf_amount"):
+            lines.append(f"잎의 양: {e.leaf_amount:.0f} / {e.max_leaf:.0f}")
+        if hasattr(e, "current_foliage"):
+            lines.append(f"덤불 잎: {e.current_foliage:.0f} / {e.max_foliage:.0f}")
+        if getattr(e, "action_text", ""):
+            lines.append(f"상태: {e.action_text}")
+        return lines
+
     def draw_selection_panel(self):
-        """선택된 몹의 속성을 우상단 패널에 보여준다."""
+        """선택된 개체(동물/지형/자원/식물)의 속성을 우상단 패널에 보여준다."""
         a = self.selected
         if a is None or not getattr(a, "alive", False):
             self.selected = None
             return
-        lines = [
-            f"{a.name}  (#{a.id})",
-            f"좌표: ({a.position.x:.0f}, {a.position.y:.0f})",
-            f"종류: {getattr(a, 'diet_type', '') or a.kind}",
-            f"체력: {a.health:.0f} / {a.max_health:.0f}",
-            f"허기: {a.hunger:.0f}   갈증: {a.thirst:.0f}",
-            f"기력: {a.stamina:.0f}   스트레스: {a.stress:.0f}",
-            f"나이: {a.age:.1f}   속도: {a.speed:.1f}   공격력: {a.power:.1f}",
-            f"행동: {a.action_text or '-'}",
-        ]
+        if getattr(a, "kind", "") == "animal":
+            lines = [
+                f"{a.name}  (#{a.id})",
+                f"좌표: ({a.position.x:.0f}, {a.position.y:.0f})",
+                f"종류: {getattr(a, 'diet_type', '') or a.kind}",
+                f"체력: {a.health:.0f} / {a.max_health:.0f}",
+                f"허기: {a.hunger:.0f}   갈증: {a.thirst:.0f}",
+                f"기력: {a.stamina:.0f}   스트레스: {a.stress:.0f}",
+                f"나이: {a.age:.1f}   속도: {a.speed:.1f}   공격력: {a.power:.1f}",
+                f"행동: {a.action_text or '-'}",
+            ]
+        else:
+            lines = self._entity_info_lines(a)
         pw, ph = 250, 24 + 22 * len(lines)
         panel = pygame.Rect(self.screen_width - pw - 16, 16, pw, ph)
         pygame.draw.rect(self.screen, PANEL_COLOR, panel, border_radius=8)
@@ -587,6 +776,21 @@ class GrasslandApp:
             font = self.font if i == 0 else self.small_font
             self.screen.blit(font.render(line, True, TEXT_COLOR),
                              (panel.x + 14, panel.y + 12 + i * 22))
+
+    def draw_rain(self):
+        """비가 올 때 화면 전체에 비스듬히 떨어지는 빗줄기를 그린다(가벼운 입자 애니메이션)."""
+        if self.world.environment.weather != "rain":
+            return
+        import random as _r
+        dt = getattr(self, "dt", 0.0)
+        w, h = self.screen_width, self.screen_height
+        for d in self.raindrops:
+            d[1] += d[2] * dt
+            d[0] -= d[2] * 0.22 * dt              # 약간 왼쪽으로 비스듬히
+            if d[1] > h:                          # 바닥에 닿으면 위에서 다시(x 재배치)
+                d[0], d[1] = _r.uniform(0, w), _r.uniform(-20, 0)
+            x, y = int(d[0]), int(d[1])
+            pygame.draw.line(self.screen, (175, 195, 225), (x, y), (x - 5, y + 12), 1)
 
     def draw_weather_tint(self):
         """날씨를 화면 전체에 은은한 반투명 색으로 덧칠(하늘 밴드 대체)."""
@@ -608,11 +812,7 @@ class GrasslandApp:
             if img is None:
                 cache[name] = False
                 return None
-            w, h = img.get_size()
-            scale = size / max(w, h)
-            new_size = (max(1, round(w * scale)), max(1, round(h * scale)))
-            scaled = pygame.transform.smoothscale(img, new_size)
-            cache[name] = scaled
+            scaled = cache[name] = scale_longest(img, size)
         return scaled or None
 
     def _draw_translucent_panel(self, rect, alpha=200):
@@ -652,7 +852,7 @@ class GrasslandApp:
                                                  btn_size, btn_size)
             self._draw_toggle_button(self.info_toggle_rect, expand=True)
             if env.ended:
-                self.end_panel(env.end_reason)
+                self.endpanel(env.end_reason)
             return
 
         ph = 118
@@ -697,19 +897,19 @@ class GrasslandApp:
         self.screen.blit(self.small_font.render(cam, True, dim),
                          (panel.x + 16, panel.y + 95))
         if env.ended:
-            self.end_panel(env.end_reason)
+            self.endpanel(env.end_reason)
 
-    def end_panel(self, reason):
+    def endpanel(self, reason):
         panel = pygame.Rect(0, 0, min(680, self.screen_width - 48), 150)
         panel.center = (self.screen_width // 2, self.screen_height // 2)
         pygame.draw.rect(self.screen, (245, 235, 211), panel, border_radius=8)
         pygame.draw.rect(self.screen, (92, 65, 50), panel, 3, border_radius=8)
-        self.label("Simulation Ended", panel.centerx, panel.centery - 42,
+        self.caption("Simulation Ended", panel.centerx, panel.centery - 42,
                    self.title_font, (62, 45, 38))
-        self.label(reason, panel.centerx, panel.centery - 5, self.font, (62, 45, 38))
-        self.label("다시 시작하겠습니까?  [Y] 예   [N] 아니오",
+        self.caption(reason, panel.centerx, panel.centery - 5, self.font, (62, 45, 38))
+        self.caption("다시 시작하겠습니까?  [Y] 예   [N] 아니오",
                    panel.centerx, panel.centery + 38, self.font, (92, 65, 50))
 
-    def label(self, text, x, y, font, color=TEXT_COLOR):
+    def caption(self, text, x, y, font, color=TEXT_COLOR):
         surface = font.render(text, True, color)
         self.screen.blit(surface, surface.get_rect(center=(x, y)))

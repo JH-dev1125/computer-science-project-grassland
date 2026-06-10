@@ -1,5 +1,5 @@
 # plain.py — 평원 (계획서 Plain, Terrain 상속) : 배경 역할(효과 없음)
-from grassland.entities.terrain.terrain_base import Terrain
+from grassland.entities.terrain.terrain import Terrain
 
 
 class Plain(Terrain):

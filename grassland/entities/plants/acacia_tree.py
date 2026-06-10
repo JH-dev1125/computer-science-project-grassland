@@ -57,6 +57,21 @@ class AcaciaTree(Plant):
             animal.action_text = "thorned"
 
     def produce_leaves(self) -> None:
-        """잎을 재생산하고 체력을 소량 회복."""
+        """잎을 재생산하고 체력을 소량 회복(자가 광합성)."""
         self.leaf_amount = min(self.max_leaf, self.leaf_amount + 8.0)
         self.health = min(self.max_health, self.health + 5.0)
+
+    def eat_leaves(self, amount: float) -> float:
+        """코끼리 등이 잎을 뜯어 먹는다 — 먹은 양 반환."""
+        taken = min(self.leaf_amount, amount)
+        self.leaf_amount -= taken
+        return taken
+
+    def has_foliage(self) -> bool:
+        """잎이 충분한가(부족하면 동물이 그늘·먹이로 모이지 않는다)."""
+        return self.leaf_amount > 20.0
+
+    def provide_shade(self, animal) -> None:
+        """그늘: 동물 스트레스를 낮춘다(가뭄 더위 회피용)."""
+        if hasattr(animal, "stress"):
+            animal.stress = max(0.0, animal.stress - 5.0)

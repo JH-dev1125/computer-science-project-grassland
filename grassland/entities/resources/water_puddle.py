@@ -9,8 +9,9 @@ class WaterPuddle(Resource):
                          color=(65, 145, 208), radius=28)
 
     def reduce_thirst(self, animal):
-        self.consume(18)
-        animal.thirst = 0.0
+        # 한 모금에 조금씩 — 물도 조금 줄고 갈증도 조금 가신다(다 마르면 사라짐)
+        taken = self.consume(5)
+        animal.thirst = max(0.0, animal.thirst - taken * 3.2)
 
     def enable_drinking(self, animal):
         self.reduce_thirst(animal)

@@ -2,7 +2,7 @@
 # entities/resources/resource.py — 모든 소모성 자원의 부모 (계획서 Resource)
 # 속성: (x,y)=position, amount  /  메서드: consume(), regenerate(), delete()
 # =============================================================================
-from grassland.entities.base import Entity
+from grassland.entities.entity import Entity
 
 
 class Resource(Entity):

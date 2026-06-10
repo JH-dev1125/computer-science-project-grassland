@@ -31,6 +31,8 @@ class BaldEagle(Carnivore):
         super().__init__("Bald_Eagle", position, (92, 82, 63),
                          health=58.0, speed=122.0, power=10.0, detect_range=300.0)
         self.radius = 14.0
+        self.thirst_limit = 88.0
+        self.food_range = 200.0        # 사체 탐지 — 고도에서 넓게 본다(detect_range=300)
         self.fly_speed = 188.0
         self.fly_time = 0.0
         self.is_flying = True
@@ -112,7 +114,7 @@ class BaldEagle(Carnivore):
             return
 
         # 먹이가 죽었으면 생긴 사체를 찾아 먹는다
-        carcass = world.nearest_carcass(self.position)
+        carcass = world.nearest_carcass(self.position, self.food_range)
         if carcass is None:
             self.hunt_target = None
             return
@@ -147,7 +149,7 @@ class BaldEagle(Carnivore):
             return True
         # 3순위: 배고프면 지평선 근처 사체로
         if self.hunger > 40.0:
-            carcass = world.nearest_carcass(self.position)
+            carcass = world.nearest_carcass(self.position, self.food_range)
             if carcass is not None and carcass.position.y <= HORIZON_ZONE:
                 if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
                     self.land()

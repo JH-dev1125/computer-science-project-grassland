@@ -1,5 +1,5 @@
 # cave.py — 동굴 (계획서 Cave, Terrain 상속) : 안에 들어오면 은신
-from grassland.entities.terrain.terrain_base import Terrain
+from grassland.entities.terrain.terrain import Terrain
 
 
 _CAVE_ALLOWED = {"Meerkat", "Warthog"}
