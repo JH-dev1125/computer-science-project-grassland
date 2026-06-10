@@ -32,8 +32,7 @@ class Animal(Entity):
         self.thirst = random.uniform(12.0, 42.0)
         self.is_sleeping = False
         self.stamina = 100.0
-        self.stamina_recovery_rate = 7.0
-        self.stamina_drain = 30.0    # 전력질주 시 초당 기력 소모(달리는 속도에 비례)
+        self.stamina_recovery_rate = 0.05
         self.stress = 0.0
         self.detect_range = detect_range
         # 먹이(풀·사체) 탐지 거리 — 위협/사냥용 detect_range 와 분리해 종별로 다르게 둔다.
@@ -62,6 +61,16 @@ class Animal(Entity):
         self._turn_rate = random.uniform(-60.0, 60.0)  # 어슬렁 각속도(도/초) — 부드러운 곡선 경로
         self.interaction_target = None                 # 이번 프레임 상호작용 대상
 
+    @property
+    def speed(self):
+        """스태미나 기반 속도 — 기력이 떨어질수록 느려진다(S커브)."""
+        t = self.stamina / 100.0
+        return self._base_speed * (0.3 + 0.7 * t ** 0.5)
+
+    @speed.setter
+    def speed(self, value):
+        self._base_speed = value
+
     # ── 계획서 공통 메서드 ───────────────────────────────────────────
     def _feed_ready(self):
         """섭취 쿨다운 — 준비됐으면 True 로 만들고 타이머를 건다(한 입씩만 먹게)."""
@@ -82,6 +91,7 @@ class Animal(Entity):
         elif hasattr(food, "consume"):            # 식물 등
             eaten = food.consume(10)
             self.hunger = max(0.0, self.hunger - eaten)
+        self.stamina = min(100.0, self.stamina + 7.5)
 
     def drink(self, source):
         """source 는 reduce_thirst(self) 또는 enable_drinking(self) 를 가진 객체.
@@ -94,6 +104,7 @@ class Animal(Entity):
             source.reduce_thirst(self)
         elif hasattr(source, "enable_drinking"):
             source.enable_drinking(self)
+        self.stamina = min(100.0, self.stamina + 2.5)
 
     def sleep(self):
         self.is_sleeping = True
@@ -151,25 +162,13 @@ class Animal(Entity):
         return False
 
     def recover_stamina(self, dt):
-        """실제 이동 속도에 따라 기력을 소모/회복한다(매 update 호출).
-        빠르게 달리면(>0.6×speed) 지치고, 느리거나 멈추면 회복한다.
-        기력이 낮으면 physics 가 최고 속도를 깎아 '지쳐서 느려지는' 효과를 준다.
-        나이가 들수록(age↑) 회복이 서서히 느려진다 — 누적 효과라 체감이 완만하다."""
-        run = self.velocity.length() / max(self.speed, 1.0)
-        # 나이 패널티: 노령일수록 기력 회복이 느림(600초 이후 서서히, 최대 40% 감소)
-        age_recovery_factor = max(0.60, 1.0 - self.age * 0.00067)
-        hunger_penalty = max(0.0, min(1.0, (self.hunger - 60.0) / 40.0))
-        if run > 0.6:
-            drain = self.stamina_drain * (1.0 + 0.65 * hunger_penalty)
-            self.stamina = max(0.0, self.stamina - (run - 0.6) * drain * dt)
-        else:
-            recovery = self.stamina_recovery_rate * age_recovery_factor * (1.0 - 0.55 * hunger_penalty)
-            self.stamina = min(100.0, self.stamina + recovery * dt)
-        if self.hunger >= 90.0:
-            self.stamina = max(0.0, self.stamina - (self.hunger - 90.0) * 0.10 * dt)
+        """패시브 기력 회복(아주 느림) + 이동 소모."""
+        self.stamina = min(100.0, self.stamina + self.stamina_recovery_rate * dt)
+        if self.velocity.length_squared() > 1.0:
+            self.lose_energy(0.5 * dt)
         if self.feed_timer > 0.0:
             self.feed_timer = max(0.0, self.feed_timer - dt)
-        self.tick_combat(dt)   # 모든 동물이 매 update 에서 호출 → 전투 쿨다운 감소
+        self.tick_combat(dt)
 
     def hunger_speed_factor(self):
         """심하게 배고플수록 최고 속도가 줄어든다. 80 전까지는 정상, 100에서 65%."""
@@ -198,40 +197,9 @@ class Animal(Entity):
             self.action_text = "water"
         return True
 
-    def seek_plants_if_needed(self, world):
-        """배고프면 가장 가까운 식물로 이동·섭취. 행동했으면 True."""
-        if self.hunger < 40.0:
-            return False
-        plant = world.nearest_plant(self.position, self.food_range)
-        if plant is None:
-            return self.search_for_food(world, "search_food")
-        self.interaction_target = plant
-        if self.distance_to(plant) <= self.radius + plant.radius + 8:
-            self.eat(plant)
-            self.stop()
-        else:
-            self.move_toward(plant.position, self.speed * 0.7)
-            self.action_text = "graze"
-        return True
-
-    def search_for_food(self, world, action_text="search"):
-        """먹이가 감지 범위 안에 없을 때의 적극 탐색.
-        감지 범위를 늘리지는 않고, 쉬지 않고 더 자주 새 목적지를 잡아 맵을 훑게 한다."""
-        if self.hunger < self.HUNGER_SEARCH_LEVEL:
-            return False
-        self.interaction_target = None
-        self.is_resting = False
-        if self._roam is None or self.position.distance_to(self._roam) < 80.0:
-            self._roam = Vector2(random.uniform(35, world.width - 35),
-                                 random.uniform(35, world.height - 35))
-        to = self._roam - self.position
-        if to.length_squared() < 1e-6:
-            self._roam = None
-            return False
-        self.heading = Vector2(1.0, 0.0).angle_to(to)
-        self.desired_velocity = to.normalize() * (self.speed * 0.62)
-        self.action_text = action_text
-        return True
+    def search_food(self, world, dt):
+        """먹이 탐색 — 빈 구현. 각 서브클래스(Herbivore/Carnivore/Omnivore)가 오버라이드."""
+        return False
 
     def evade(self, threat_pos, speed, dt, lateral=0.7, period=0.45):
         """지그재그 회피 — 포식자 반대 방향 + 좌우로 '번갈아' 꺾는 횡방향 성분을 더한다.
@@ -247,6 +215,7 @@ class Animal(Entity):
         perp = Vector2(-away.y, away.x) * (self._juke_sign * lateral)
         self.desired_velocity = (away + perp).normalize() * speed
         self.action_text = "flee"
+        self.lose_energy(5.0 * dt)
 
     def wander(self, world, dt):
         """할 일이 없을 때 — 부드러운 어슬렁 + 가끔 '맵 먼 곳 로밍'으로 전체 맵을 누빈다
@@ -272,7 +241,7 @@ class Animal(Entity):
 
         if self.is_resting:
             self.stop()
-            self.action_text = "watch"
+            self.action_text = "wander"
             return
 
         # 2) 로밍 목적지가 있으면 그쪽으로 이동. 완전한 직선이 아닌 사인파 흔들림을 섞어
@@ -286,7 +255,7 @@ class Animal(Entity):
                 perp = Vector2(-to.y, to.x).normalize()
                 wobble = perp * math.sin(self.age * 1.3) * 0.28
                 self.desired_velocity = (to.normalize() + wobble).normalize() * (self.speed * 0.5)
-                self.action_text = "roam"
+                self.action_text = "wander"
                 return
 
         # 3) 각속도(_turn_rate)를 부드럽게 변화시켜 자연스러운 곡선 경로를 만든다.

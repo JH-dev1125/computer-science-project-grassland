@@ -18,7 +18,6 @@ class Gazelle(Herbivore):
 
     def fight_or_flight(self, threat, world, dt):
         self.zigzag(threat, dt)
-        self.lose_energy((1.0 - self.endurance) * 4.0 * dt)
 
     def zigzag(self, threat, dt):
         """좌우로 '번갈아' 크게 꺾어 달리는 지그재그 도주(가젤 특기). evade 에 강한 횡방향
@@ -27,4 +26,5 @@ class Gazelle(Herbivore):
         lateral = self.zigzag_angle / 45.0   # 45°=1.0, 52°≈1.16 — 각도가 직접 기동성에 반영됨
         self.evade(threat.position, self.flee_speed * self._escape_luck, dt,
                    lateral=lateral, period=0.4)
+        self.lose_energy(13.0 * dt)   # evade -5/s + 여기 -13/s = 합계 -18/s
         self.action_text = "zigzag"

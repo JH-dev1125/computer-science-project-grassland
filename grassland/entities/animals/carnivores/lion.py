@@ -11,7 +11,7 @@ class Lion(Carnivore):
                          health=120.0, speed=84.0, power=22.0, detect_range=170.0)
         self.thirst_limit = 70.0
         self.food_range = 130.0        # 사체 탐지 — 독점 방지(detect_range=170)
-        self.hunt_stamina_cost = 17.0
+        self.hunt_stamina_cost = 5.0
         self.acceleration = 48.0
         self.mane_size = 1.0
         self.mane_exist = True
@@ -30,8 +30,6 @@ class Lion(Carnivore):
             if self._last_elephant_pos is not None:
                 self.move_away_from(self._last_elephant_pos, self.speed)
             self.action_text = "avoid"
-            return True
-        if self.feed_hunted_carcass(world):
             return True
         # 2순위: 극도 굶주림 — 목표 근처에 코끼리 없을 때만 접근
         if self.hunger > 72.0:
@@ -60,14 +58,13 @@ class Lion(Carnivore):
                     self.stop()
                 else:
                     self.move_toward(carcass.position, self.speed * 0.75)
-                    self.action_text = "carcass"
+                    self.action_text = "search_food"
                 return True
-        if self.hunger >= self.HUNGER_SEARCH_LEVEL:
-            return self.search_for_food(world, "search_prey")
         return self.ambush(world, dt)   # 먹이가 안 보이면 덤불에 숨어 기습 시도
 
     def roar(self, world):
         """포효: 일정 범위 내 Zebra 의 panic 을 유발(직접 안 보여도 경계↑)."""
+        self.lose_energy(35.0)
         for animal in world.living_animals():
             if animal.name == "Zebra" and self.distance_to(animal) <= 320.0:
                 if hasattr(animal, "panic_boost_timer"):

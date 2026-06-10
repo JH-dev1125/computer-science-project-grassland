@@ -23,6 +23,7 @@ class Zebra(Herbivore):
             self.alert_herd(world)           # 도망치며 무리에 경고
 
     def kick(self, threat, world):
+        self.lose_energy(30.0)
         old_power, self.power = self.power, self.kick_power
         self.attack(threat, world)
         self.power = old_power

@@ -1,7 +1,7 @@
 # =============================================================================
 # bald_eagle.py — 대머리 독수리 (계획서 Bald_eagle, Carnivore 상속)
 # 고유 속성: is_flying, fly_speed, fly_time, altitude
-# 고유 메서드: fly(), land(), eat_carcass()
+# 고유 메서드: fly(), land()
 # 분해자 역할: 늘 상공을 선회하며(생활의 약 80%), 지평선 부근에서 사체를 발견했을
 #             때만 내려앉아 먹는다. 그 밖에는 fly() 가 이 동물의 기본 상태다.
 # 단, 빈사 상태(체력 20% 미만)의 동물을 탐지거리 안에서 발견하면 곧장 내리꽂혀
@@ -43,6 +43,7 @@ class BaldEagle(Carnivore):
         self._altitude_timer = random.uniform(1.5, 4.0)
         # ── 빈사 상태 동물 사냥 ─────────────────────────────────────────
         self.hunt_target = None
+        self.hunt_stamina_cost = 5.0
         # ── 순찰 비행 (가만히 있지 않도록) ──────────────────────────────
         self._patrol_heading = random.uniform(0.0, 360.0)
         self._patrol_timer = random.uniform(1.0, 3.0)
@@ -78,11 +79,6 @@ class BaldEagle(Carnivore):
         elif self.altitude > target:
             self.altitude = max(target, self.altitude - step)
 
-    def eat_carcass(self, carcass):
-        carcass.reduce_hunger(self)
-        carcass.being_eaten_by = self
-        self.action_text = "eat_carcass"
-
     def find_weak_target(self, world):
         """탐지거리 안에서 빈사 상태인 가장 가까운 동물을 찾는다. 코끼리·독수리 제외."""
         target, nearest = None, None
@@ -99,11 +95,13 @@ class BaldEagle(Carnivore):
     def hunt(self, prey, world, dt):
         """Carnivore.hunt() 확장 — 빈사 동물 추적·급강하·사체 섭취까지 일괄 처리.
         이동 속도는 fly_speed + acceleration 으로 부모의 acceleration 메커니즘을 사용."""
+        if self.hunt_target is not prey:   # 새 먹이 → 급강하 시작 비용
+            self.lose_energy(35.0)
         self.hunt_target = prey
 
         if prey.alive:
             if self.stamina <= 8.0:
-                self.rest()
+                self.rest(dt)
                 return
             self.land()
             self.interaction_target = prey
@@ -111,7 +109,7 @@ class BaldEagle(Carnivore):
                 was_alive = prey.alive
                 self.attack(prey, world)
                 if was_alive and not prey.alive:
-                    self.claim_hunted_carcass(world, prey)
+                    self.hunt_target = None  # 다음 틱에서 search_food()가 사체 탐지
                 self.stop()
             else:
                 self.move_toward(prey.position, self.fly_speed + self.acceleration)
@@ -119,28 +117,8 @@ class BaldEagle(Carnivore):
             self.lose_energy(self.hunt_stamina_cost * dt)
             return
 
-        # 먹이가 죽었으면 생긴 사체를 찾아 먹는다
-        if self.hunted_carcass is None:
-            self.claim_hunted_carcass(world, prey)
-        if self.feed_hunted_carcass(world):
-            if self.hunted_carcass is None:
-                self.hunt_target = None
-            return
-        carcass = self.nearest_available_carcass(world, self.food_range)
-        if carcass is None:
-            self.hunt_target = None
-            return
-        self.interaction_target = carcass
-        if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
-            self.land()
-            self.eat_carcass(carcass)
-            self.stop()
-        else:
-            self.fly()
-            self.move_toward(carcass.position, self.fly_speed)
-            self.action_text = "carcass"
-        if not carcass.alive:
-            self.hunt_target = None
+        # 이미 죽어있으면 hunt_target 해제 → search_food()가 근처 사체 탐지
+        self.hunt_target = None
 
     def behave(self, world, dt):
         # 1순위: 위협 회피
@@ -154,8 +132,6 @@ class BaldEagle(Carnivore):
             self.fly()
             self.move_away_from(elephant.position, self.fly_speed)
             return True
-        if self.feed_hunted_carcass(world):
-            return True
         # 2순위: 빈사 동물 사냥
         target = self.hunt_target or self.find_weak_target(world)
         if target is not None:
@@ -167,12 +143,12 @@ class BaldEagle(Carnivore):
             if carcass is not None and carcass.position.y <= HORIZON_ZONE:
                 if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
                     self.land()
-                    self.eat_carcass(carcass)
+                    self.eat(carcass)
                     self.stop()
                 else:
                     self.fly()
                     self.move_toward(carcass.position, self.fly_speed)
-                    self.action_text = "carcass"
+                    self.action_text = "search_food"
                 return True
         # 4순위: 순찰 비행 — 항상 움직이며 주기적으로 방향 전환(절대 멈추지 않음)
         self._patrol_timer -= dt
