@@ -691,9 +691,9 @@ class GrasslandApp:
             self.screen.blit(self.small_font.render(row2, True, TEXT_COLOR),
                              (panel.x + 16, panel.y + 68))
         dim = (58, 72, 48)
-        cam = f"드래그로 스크롤   ({int(self.camera.x)}, {int(self.camera.y)})"
+        cam = f"드래그 ({int(self.camera.x)}, {int(self.camera.y)})"
         if self.clicked_point is not None:
-            cam += f"   |   클릭한 지점: ({self.clicked_point.x:.0f}, {self.clicked_point.y:.0f})"
+            cam += f" | 클릭 ({self.clicked_point.x:.0f}, {self.clicked_point.y:.0f})"
         self.screen.blit(self.small_font.render(cam, True, dim),
                          (panel.x + 16, panel.y + 95))
         self.draw_minimap(panel)
