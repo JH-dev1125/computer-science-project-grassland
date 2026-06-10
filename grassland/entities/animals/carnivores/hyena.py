@@ -32,6 +32,7 @@ class Hyena(Carnivore):
             if self.distance_to(carcass) <= self.radius + carcass.radius + 12:
                 if random.random() < self.steal_prey_chance * (self.health / self.max_health):
                     carcass.being_eaten_by = self
+                    self._committed_food = carcass   # 탈취 성공 → 다음 프레임에 바로 eat
             self.move_toward(carcass.position, self.speed + self.acceleration)
             self.action_text = "steal"
             return
@@ -46,8 +47,10 @@ class Hyena(Carnivore):
                 if carcass.being_eaten_by is not None and carcass.being_eaten_by is not self:
                     self.hunt(carcass.being_eaten_by, world, dt)
                     return True
-                # 주인 없는 사체 → 바로 먹기
-                if carcass.being_eaten_by is None and not self._elephant_near(world, carcass.position):
+                # 내가 소유 중이거나 주인 없는 사체 → 바로 먹기
+                if (carcass.being_eaten_by is self or carcass.being_eaten_by is None) \
+                        and not self._elephant_near(world, carcass.position):
+                    self._committed_food = carcass
                     self.interaction_target = carcass
                     if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
                         self.eat(carcass)

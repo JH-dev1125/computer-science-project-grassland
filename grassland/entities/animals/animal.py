@@ -60,6 +60,7 @@ class Animal(Entity):
         self._juke_timer = random.uniform(0.3, 0.6)    # 다음 좌우 전환까지(초)
         self._turn_rate = random.uniform(-60.0, 60.0)  # 어슬렁 각속도(도/초) — 부드러운 곡선 경로
         self.interaction_target = None                 # 이번 프레임 상호작용 대상
+        self._committed_food = None                    # 한 번 결정한 먹이 대상(바꾸지 않음)
 
     @property
     def speed(self):
@@ -197,6 +198,20 @@ class Animal(Entity):
             self.move_toward(water.position, self.speed * 0.85)
             self.action_text = "water"
         return True
+
+    def _food_valid(self, food):
+        """committed 먹이 대상이 아직 유효한지 확인."""
+        if food is None:
+            return False
+        # 살아있는 먹잇감(prey)
+        if hasattr(food, 'diet_type'):
+            return food.alive and self.distance_to(food) <= self.detect_range * 1.5
+        # 사체
+        if hasattr(food, 'amount'):
+            return (getattr(food, 'alive', True) and food.amount > 0
+                    and food.id not in getattr(self, '_finished_carcasses', set()))
+        # 식물/나무
+        return getattr(food, 'alive', False) and getattr(food, 'health', 1) > 0
 
     def search_food(self, world, dt):
         """먹이 탐색 — 빈 구현. 각 서브클래스(Herbivore/Carnivore/Omnivore)가 오버라이드."""

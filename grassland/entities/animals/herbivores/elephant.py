@@ -56,10 +56,28 @@ class Elephant(Herbivore):
     def search_food(self, world, dt):
         threshold = 20.0 if self.stamina < 25.0 else 40.0
         if self.hunger < threshold:
+            self._committed_food = None
             return False
-        # 나무 잎을 먼저 탐색, 없으면 Herbivore 일반 식물 탐색
+        # committed target 유지 (나무 또는 식물)
+        if self._food_valid(self._committed_food):
+            food = self._committed_food
+            self.interaction_target = food
+            if self.distance_to(food) <= self.radius + food.radius + 12:
+                if self._feed_ready():
+                    eaten = (food.eat_leaves(10.0) if hasattr(food, 'eat_leaves')
+                             else food.consume(10))
+                    self.hunger = max(0.0, self.hunger - eaten)
+                self.stop()
+                self.action_text = "eat"
+            else:
+                self.move_toward(food.position, self.speed * 0.7)
+                self.action_text = "search_food"
+            return True
+        self._committed_food = None
+        # 나무 잎 우선 탐색
         tree = world.nearest_tree(self.position, self.detect_range, need_foliage=True)
         if tree is not None:
+            self._committed_food = tree
             self.interaction_target = tree
             if self.distance_to(tree) <= self.radius + tree.radius + 12:
                 if self._feed_ready():

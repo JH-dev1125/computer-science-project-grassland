@@ -49,9 +49,26 @@ class Carnivore(Animal):
     def search_food(self, world, dt):
         threshold = 20.0 if self.stamina < 25.0 else 45.0
         if self.hunger < threshold:
+            self._committed_food = None
             return False
+        # committed target 유지
+        if self._food_valid(self._committed_food):
+            food = self._committed_food
+            if hasattr(food, 'diet_type'):  # 살아있는 먹잇감 → 사냥 계속
+                self.hunt(food, world, dt)
+            else:                           # 사체 → 먹기
+                self.interaction_target = food
+                if self.distance_to(food) <= self.radius + food.radius + 8:
+                    self.eat(food)
+                    self.stop()
+                else:
+                    self.move_toward(food.position, self.speed * 0.75)
+                    self.action_text = "search_food"
+            return True
+        self._committed_food = None
         carcass = self.nearest_available_carcass(world, self.food_range)
         if carcass is not None and not self._elephant_near(world, carcass.position):
+            self._committed_food = carcass
             self.interaction_target = carcass
             if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
                 self.eat(carcass)
@@ -62,6 +79,7 @@ class Carnivore(Animal):
             return True
         prey = self.find_prey(world)
         if prey is not None and not self._elephant_near(world, prey.position):
+            self._committed_food = prey
             self.hunt(prey, world, dt)
             return True
         return False
