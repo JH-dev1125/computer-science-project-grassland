@@ -28,6 +28,10 @@ from pygame.math import Vector2
 
 
 class GrasslandApp:
+    SPEED_STEPS = (0.25, 0.5, 1.0, 2.0, 4.0)
+    DEFAULT_SPEED = 0.5
+    WEATHER_ORDER = ("sunny", "cloudy", "rain", "drought")
+
     def __init__(self, world):
         pygame.init()
         pygame.display.set_caption("와글와글 초원 생태계")
@@ -46,6 +50,8 @@ class GrasslandApp:
         self.clicked_point = None    # 맵의 빈 곳을 클릭했을 때의 월드 좌표(Vector2 또는 None)
         self.info_collapsed = False  # 좌하단 정보 패널 접힘 여부
         self.info_toggle_rect = None  # 패널 접기/펼치기 버튼 영역(클릭 판정용, draw_ui 가 매 프레임 갱신)
+        self.paused = False
+        self.speed_index = self.SPEED_STEPS.index(self.DEFAULT_SPEED)
         self.font = self._font(17)
         self.small_font = self._font(14)
         self.title_font = self._font(22, bold=True)
@@ -62,15 +68,28 @@ class GrasslandApp:
     def run(self):
         running = True
         while running:
-            dt = self.clock.tick(FPS) / 1000.0
-            self.dt = dt
+            raw_dt = self.clock.tick(FPS) / 1000.0
+            sim_dt = 0.0 if self.paused else raw_dt * self.time_scale
+            self.dt = sim_dt
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                elif event.type == pygame.KEYDOWN and self.world.environment.ended:
-                    if event.key in (pygame.K_y, pygame.K_RETURN):
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
                         self._restart()
-                    elif event.key in (pygame.K_n, pygame.K_ESCAPE):
+                    elif event.key == pygame.K_SPACE and not self.world.environment.ended:
+                        self.paused = not self.paused
+                    elif event.key == pygame.K_RIGHT:
+                        self._change_speed(1)
+                    elif event.key == pygame.K_LEFT:
+                        self._change_speed(-1)
+                    elif event.key == pygame.K_d and not self.world.environment.ended:
+                        self._cycle_weather()
+                    elif event.key == pygame.K_e and not self.world.environment.ended:
+                        self._end_game()
+                    elif self.world.environment.ended and event.key in (pygame.K_y, pygame.K_RETURN):
+                        self._restart()
+                    elif self.world.environment.ended and event.key in (pygame.K_n, pygame.K_ESCAPE):
                         running = False
                 elif event.type == pygame.VIDEORESIZE:
                     self.resize(event.w, event.h)
@@ -93,18 +112,44 @@ class GrasslandApp:
                 elif event.type == pygame.MOUSEMOTION and self.dragging:
                     self.camera.x -= event.rel[0]   # 가로만 이동(세로 고정)
                     self.clamp_camera()
-            if not self.world.environment.ended:
-                self.world.update(dt)
-            self.update_sky(dt)
+            if not self.world.environment.ended and sim_dt > 0.0:
+                self.world.update(sim_dt)
+            self.update_sky(0.0 if self.paused else raw_dt)
             self.draw()
         pygame.quit()
+
+    @property
+    def time_scale(self):
+        return self.SPEED_STEPS[self.speed_index]
 
     def _restart(self):
         from grassland.world import World
         self.world = World.seed_default()
         self.camera = Vector2(220, 0)
         self.selected = None
+        self.clicked_point = None
+        self.paused = False
+        self.speed_index = self.SPEED_STEPS.index(self.DEFAULT_SPEED)
         self._init_sky()
+
+    def _change_speed(self, step):
+        self.speed_index = max(0, min(len(self.SPEED_STEPS) - 1,
+                                      self.speed_index + step))
+
+    def _cycle_weather(self):
+        env = self.world.environment
+        try:
+            i = self.WEATHER_ORDER.index(env.weather)
+        except ValueError:
+            i = -1
+        env.weather = self.WEATHER_ORDER[(i + 1) % len(self.WEATHER_ORDER)]
+        env.change_temp()
+        env._weather_hours = 0.0
+
+    def _end_game(self):
+        env = self.world.environment
+        env.ended = True
+        env.end_reason = "사용자가 시연을 종료했습니다"
 
     # ── 카메라 ───────────────────────────────────────────────────────────
     def clamp_camera(self):
@@ -149,8 +194,8 @@ class GrasslandApp:
                         "roar": "roar", "hide": "hide",
                         "avoid": "walk", "carcass": "walk", "return": "walk", "stalk": "walk",
                         "rest": "idle", "eat_carcass": "idle", "watch": "idle"},
-            "states": {"walk": (["lion", "lion_walk1"], 0.25),
-                       "hunt": (["lion_hunt1", "lion_hunt2"], 0.18),
+            "states": {"walk": (["lion", "lion_walk1"], 0.36),
+                       "hunt": (["lion_hunt1", "lion_hunt2"], 0.28),
                        "roar": (["lion_roar"], 1.0), "hide": (["lion_hide"], 1.0),
                        "idle": (["lion"], 1.0)},
         },
@@ -165,7 +210,9 @@ class GrasslandApp:
         },
         "Bald_Eagle": {   # 독수리는 idle 대신 날갯짓 두 프레임(fly1↑/fly2↓)을 번갈아 쓴다
             "actions": {"fly": "fly", "carcass": "fly",
-                        "swoop": "swoop", "land": "land", "eat_carcass": "land"},
+                        "swoop": "swoop", "hunt": "swoop", "attack": "swoop",
+                        "land": "land", "eat_carcass": "land",
+                        "rest": "land", "avoid": "fly", "water": "fly"},
             "states": {"fly": (["bald_eagle_fly1", "bald_eagle_fly2"], 0.30),
                        "swoop": (["bald_eagle_swoop"], 1.0),
                        "land": (["bald_eagle_land"], 1.0), "idle": (["bald_eagle"], 1.0)},
@@ -181,8 +228,8 @@ class GrasslandApp:
             "actions": {"flee": "flee", "zigzag": "flee",
                         "graze": "walk", "water": "walk", "roam": "walk",
                         "wander": "walk", "watch": "idle"},
-            "states": {"walk": (["gazelle", "gazelle_walk1"], 0.22),
-                       "flee": (["gazelle_flee", "gazelle_walk1"], 0.12),
+            "states": {"walk": (["gazelle", "gazelle_walk1"], 0.34),
+                       "flee": (["gazelle_flee", "gazelle_walk1"], 0.20),
                        "idle": (["gazelle"], 1.0)},
         },
         "Zebra": {
@@ -200,10 +247,10 @@ class GrasslandApp:
                         "forage": "walk", "graze": "walk", "water": "walk", "drink": "walk",
                         "roam": "walk", "wander": "walk", "flee": "walk",
                         "hunt": "walk", "devour": "walk", "watch": "idle"},
-            "states": {"walk": (["meerkat_walk"], 1.0),
-                       "stand": (["meerkat_stand"], 1.0),
-                       "cave": (["meerkat_cave"], 1.0),
-                       "hide": (["meerkat_hide"], 1.0),
+            "states": {"walk": (["meerkat_walk"], 1.4),
+                       "stand": (["meerkat_stand"], 1.4),
+                       "cave": (["meerkat_cave"], 1.4),
+                       "hide": (["meerkat_hide"], 1.4),
                        "idle": (["meerkat"], 1.0)},
         },
     }
@@ -231,14 +278,45 @@ class GrasslandApp:
         frames = [f for f in frames if sprite_exists(f)] or [base]
         return frames, dur, state
 
+    # 특정 (동물, 상태) 조합은 최소 이 시간(초) 유지 후에만 다른 상태로 전환한다.
+    # 독수리 swoop·코끼리 stomp 는 순간적으로 트리거되므로 최소 지속 없이는 한 프레임만 보인다.
+    _ANIM_MIN_HOLD = {
+        ("Bald_Eagle", "swoop"): 0.55,
+        ("Elephant",   "stomp"): 0.45,
+        ("Meerkat",    "walk"): 0.70,
+        ("Meerkat",    "stand"): 0.80,
+        ("Meerkat",    "cave"): 0.80,
+        ("Meerkat",    "hide"): 0.80,
+    }
+
     def _frame(self, entity, dt):
         """프레임 타이머를 진전시켜 지금 그릴 프레임 이름을 고른다. 상태가 바뀌면
-        타이머를 초기화해 새 동작이 처음 프레임부터 자연스럽게 시작되도록 한다."""
+        타이머를 초기화해 새 동작이 처음 프레임부터 자연스럽게 시작되도록 한다.
+        _ANIM_MIN_HOLD 에 등록된 상태는 최소 지속 시간을 채우기 전엔 전환되지 않아
+        짧게 번쩍이는 것처럼 보이는 현상을 막는다."""
         frames, dur, state = self._animation(entity)
-        if getattr(entity, "_anim_state", None) != state:
-            entity._anim_state = state
-            entity._anim_timer = 0.0
-            entity._anim_index = 0
+        prev_state = getattr(entity, "_anim_state", None)
+        state_hold = getattr(entity, "_anim_state_hold", 0.0)
+
+        if prev_state != state:
+            min_hold = self._ANIM_MIN_HOLD.get((entity.name, prev_state), 0.0)
+            if prev_state is not None and state_hold < min_hold:
+                # 아직 최소 유지 시간이 안 됐으므로 이전 상태를 강제 유지
+                state = prev_state
+                cfg = self.ANIMATIONS.get(entity.name)
+                if cfg and state in cfg.get("states", {}):
+                    raw_f, dur = cfg["states"][state]
+                    base = entity.name.lower()
+                    frames = [f for f in raw_f if sprite_exists(f)] or [base]
+            else:
+                # 상태 전환 허용: 타이머·인덱스 초기화
+                entity._anim_state = state
+                entity._anim_timer = 0.0
+                entity._anim_index = 0
+                state_hold = 0.0
+
+        entity._anim_state_hold = state_hold + dt
+
         if len(frames) <= 1:
             return frames[0]
         entity._anim_timer = getattr(entity, "_anim_timer", 0.0) + dt
@@ -862,7 +940,8 @@ class GrasslandApp:
         self.info_toggle_rect = pygame.Rect(panel.right - btn_size - 8, panel.y + 8,
                                              btn_size, btn_size)
         self._draw_toggle_button(self.info_toggle_rect, expand=False)
-        title = f"Day {env.day}  ·  {env.clock_text()}  ·  {env.temperature}°C"
+        state = "PAUSED" if self.paused else f"x{self.time_scale:g}"
+        title = f"Day {env.day}  ·  {env.clock_text()}  ·  {env.temperature}°C  ·  {state}"
         tx, ty = panel.x + 16, panel.y + 12
         title_surf = self.title_font.render(title, True, TEXT_COLOR)
         self.screen.blit(title_surf, (tx, ty))

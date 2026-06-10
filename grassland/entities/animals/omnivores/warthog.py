@@ -84,7 +84,7 @@ class Warthog(Omnivore):
                 return True
 
         # 배고프면 식물·사체 (체력이 낮을 땐 사냥을 못 해 자연히 이쪽 = 안전한 채식)
-        if self.hunger > 52.0:
+        if self.hunger > 40.0:
             food = self.decide_food(world)
             if food is not None:
                 if self.distance_to(food) <= self.radius + food.radius + 8:
@@ -92,6 +92,12 @@ class Warthog(Omnivore):
                     self.stop()
                 else:
                     self.move_toward(food.position, self.speed * 0.75)
-                    self.action_text = "forage"
+                    # 풀을 향해 이동할 때는 dig() 를 호출해 "뿌리를 캐러 간다"는 행동 표시
+                    if hasattr(food, 'photosynthesis'):
+                        self.dig(world)   # action_text = "dig" 로 설정됨
+                    else:
+                        self.action_text = "forage"
                 return True
+            if self.hunger >= self.HUNGER_SEARCH_LEVEL:
+                return self.search_for_food(world, "search_food")
         return False

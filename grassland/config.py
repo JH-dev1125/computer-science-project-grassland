@@ -24,8 +24,8 @@ MEERKAT_ENDING_DAY = 4
 MEERKAT_GROW_PER_SEC = 0.03   # 미어캣 성장 속도(0→1 만렙까지 ≈ 1/이 값 초)
 
 SEED_COUNTS = {
-    "Lion": 5, "Hyena": 6, "Bald_Eagle": 5,
-    "Zebra": 7, "Gazelle": 7, "Elephant": 5,
+    "Lion": 2, "Hyena": 3, "Bald_Eagle": 3,
+    "Zebra": 9, "Gazelle": 9, "Elephant": 3,
     "Meerkat": 6, "Warthog": 6,
 }
 

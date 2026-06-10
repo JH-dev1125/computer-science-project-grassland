@@ -377,18 +377,28 @@ class World:
             self.plants.append(Grass(pos))
 
     def try_reproduce(self):
-        """피식자/잡식이 안전·포만 상태이고 같은 종이 가까우면 낮은 확률로 번식."""
+        """피식자/잡식이 안전·포만 상태이고 같은 종이 가까우면 낮은 확률로 번식.
+        개체수가 줄어들수록 번식 확률이 완만하게 올라 멸종 직전 회복력을 높인다."""
+        alive_by_name: dict[str, int] = {}
+        for a in self.animals:
+            if a.alive:
+                alive_by_name[a.name] = alive_by_name.get(a.name, 0) + 1
+
         for animal in self.living_animals():
-            # 잘 먹고(배고픔/갈증 낮고) 쫓기지 않을 때만 번식 (육식/초식/잡식 공통)
-            if animal.hunger > 45 or animal.thirst > 45:
+            if animal.hunger > 52 or animal.thirst > 52:
                 continue
             if getattr(animal, "is_chased", False):
                 continue
-            cap = 8 if animal.diet_type == "carnivore" else 14  # 포식자 상한은 낮게
-            if len([a for a in self.animals if a.alive and a.name == animal.name]) >= cap:
+            cap = 6 if animal.diet_type == "carnivore" else 12
+            cur = alive_by_name.get(animal.name, 1)
+            if cur >= cap:
                 continue
-            mate = self.nearest_same_species(animal, 60.0)
-            if mate is not None and random.random() < 0.0015:
+            # 개체수가 적을수록 번식 확률이 점진적으로 증가(연속 함수, 이산 임계값 없음)
+            density_factor = 1.0 + max(0.0, (cap * 0.5 - cur) / (cap * 0.5)) * 1.5
+            mate_range = 80.0 if animal.diet_type != "carnivore" else 60.0
+            mate = self.nearest_same_species(animal, mate_range)
+            prob = 0.0010 if animal.diet_type == "carnivore" else 0.0018
+            if mate is not None and random.random() < prob * density_factor:
                 if animal.couple(animal, mate):
                     self.spawn_offspring(animal)
 
@@ -529,11 +539,25 @@ class World:
         return self._nearest(self.animals, hunter.position, ok, max_distance)
 
     def nearest_predator(self, animal, max_distance):
-        # 덤불에 숨은(is_hidden) 포식자는 피식자에게 보이지 않는다 → 기습 성립
-        return self._nearest(self.animals, animal.position,
-                             lambda a: a is not animal and a.diet_type == "carnivore"
-                                       and not a.is_hidden,
-                             max_distance)
+        """피식자 입장에서 보이는 포식자를 찾는다.
+        - 덤불에 숨은(is_hidden) 포식자는 탐지 불가(기습 성립).
+        - stealth 수치가 높을수록 더 가까이 와야 탐지된다(연속적 은신 효과).
+          stealth=0.18 → 탐지 거리 89%, stealth=0.40 → 76%로 줄어든다."""
+        best, nearest_pred = float("inf"), None
+        for a in self.animals:
+            if not a.alive:
+                continue
+            if a is animal or a.diet_type != "carnivore" or a.is_hidden:
+                continue
+            d = animal.position.distance_to(a.position)
+            # stealth가 높을수록 먹이가 인식하는 유효 탐지 거리가 줄어든다
+            stealth = getattr(a, 'stealth', 0.0)
+            visible_range = max_distance * (1.0 - stealth * 0.55)
+            if d > visible_range:
+                continue
+            if d < best:
+                best, nearest_pred = d, a
+        return nearest_pred
 
     def nearest_prey_for(self, predator, max_distance):
         # 코끼리(Elephant)는 몸집이 커 사냥 대상에서 제외 — 접근 시 stomp 로 쫓겨난다.

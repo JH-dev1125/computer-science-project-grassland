@@ -22,6 +22,11 @@ class Meerkat(Omnivore):
         self.sentinel_height = 0.0
         self.apocalypse = False   # 미어캣 엔딩 발동 시 True — 모든 것을 잡아먹는다
         self._grow = 0.0          # 거대화 진행도(0→1, world 가 갱신)
+        self._roam_chance = 0.15  # 기본값(0.4)보다 낮게 — 멀리 로밍을 덜 시도
+        # 위협을 마지막으로 본 뒤 이 시간이 지나야 굴 밖으로 나온다.
+        # 포식자가 잠깐 사정권 밖으로 나갔다가 다시 돌아와도 계속 숨어 있게 해
+        # 굴에서 나왔다가 들어갔다를 반복하는 카이팅을 방지한다.
+        self._hide_timer = 0.0
 
     SENTINEL_RANGE = 1.6      # 보초 설 때 탐지 범위 배율(넓게 살핀다)
     SENTINEL_DRAIN = 6.0      # 보초 서 있는 동안 초당 기력 소모(페널티)
@@ -57,30 +62,56 @@ class Meerkat(Omnivore):
             self.action_text = "hunt"
         return True
 
+    def _stay_in_cave(self, cave, dt):
+        """굴 안에서 중심으로 살짝 당기며 숨는다.
+        physics의 분리력이 굴 밖으로 밀어내도 다시 끌려 들어오도록 작은 속도를 유지한다.
+        이로 인해 나왔다 들어갔다 반복하는 카이팅이 방지된다."""
+        self.is_hidden = True
+        to_center = cave.position - self.position
+        if to_center.length() > 1.0:
+            # 굴 중심 쪽으로 부드럽게 당김 — 너무 세면 동굴 안에서 진동하므로 낮게 유지
+            self.desired_velocity = to_center.normalize() * (self.speed * 0.20)
+        else:
+            self.stop()
+        self.action_text = "hide"
+        self.lose_energy(2.0 * dt)
+
     def behave(self, world, dt):
         if self.apocalypse:                       # 엔딩 발동 → 모든 것을 잠식
             return self.devour(world, dt)
+
+        # hide_timer 감소 — 위협을 마지막으로 본 뒤 이 시간 동안은 무조건 굴 안에 있는다
+        self._hide_timer = max(0.0, self._hide_timer - dt)
+
         # 보초는 감지 범위가 넓다(SENTINEL_RANGE 배)
         threat = world.nearest_predator(
             self, self.detect_range * (self.SENTINEL_RANGE if self.is_sentinel else 1.0))
         if threat is not None:
+            self._hide_timer = 4.5   # 위협을 볼 때마다 4.5초 타이머 리셋
             cave = world.nearest_terrain_type("Cave", self.position)
             if cave is not None:
-                self.move_toward(cave.position, self.speed * 1.2)
                 if cave.contains(self):
-                    self.is_hidden = True
-                    self.stop()
-                    self.action_text = "hide"
+                    self._stay_in_cave(cave, dt)
                 else:
+                    self.move_toward(cave.position, self.speed * 1.2)
                     self.action_text = "cave"
-                self.lose_energy(5.0 * dt)
+                    self.lose_energy(5.0 * dt)
                 return True
             self.flee_or_fight(threat, world, dt)
             return True
 
-        # 굴에서 너무 멀어지면 복귀
+        # 위협이 없어도 hide_timer가 남아있으면 굴 안에 계속 머문다 — 카이팅 방지 핵심
+        if self._hide_timer > 0.0:
+            cave = world.nearest_terrain_type("Cave", self.position)
+            if cave is not None and cave.contains(self):
+                self._stay_in_cave(cave, dt)
+                return True
+            # 굴 밖이면 hide_timer를 소진하며 일반 행동(위협 재감지 대비)
+
+        # 굴에서 너무 멀어지면 복귀 — 원정 목적지도 취소해 복귀 후 또 멀리 나가지 않도록
         cave = world.nearest_terrain_type("Cave", self.position)
         if cave is not None and self.distance_to(cave) > MEERKAT_HOME_RADIUS:
+            self._roam = None   # 귀환 도중 원정 목적지 취소
             self.move_toward(cave.position, self.speed)
             self.action_text = "return"
             self.lose_energy(4.0 * dt)
@@ -98,3 +129,22 @@ class Meerkat(Omnivore):
             self.stand(dt)
             return True
         return False
+
+    def wander(self, world, dt):
+        """roam 목적지를 굴 반경 안으로 제한한다.
+        기본 wander() 는 맵 전체에서 랜덤 목적지를 잡아 MEERKAT_HOME_RADIUS 밖을
+        향하게 만든다. 목적지가 반경 밖이면 취소해 roam→return 무한 루프를 끊는다."""
+        import random as _r
+        cave = world.nearest_terrain_type("Cave", self.position)
+
+        # 현재 _roam 이 반경 밖이면 미리 취소
+        if cave is not None and self._roam is not None:
+            if cave.position.distance_to(self._roam) > MEERKAT_HOME_RADIUS * 0.75:
+                self._roam = None
+
+        super().wander(world, dt)
+
+        # super() 가 새 _roam 을 잡았을 수 있으므로 다시 한 번 확인
+        if cave is not None and self._roam is not None:
+            if cave.position.distance_to(self._roam) > MEERKAT_HOME_RADIUS * 0.75:
+                self._roam = None

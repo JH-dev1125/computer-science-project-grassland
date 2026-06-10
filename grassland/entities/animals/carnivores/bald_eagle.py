@@ -46,6 +46,9 @@ class BaldEagle(Carnivore):
         # ── 순찰 비행 (가만히 있지 않도록) ──────────────────────────────
         self._patrol_heading = random.uniform(0.0, 360.0)
         self._patrol_timer = random.uniform(1.0, 3.0)
+        # 순찰 속도 벡터를 캐싱 — 방향 전환 시에만 다시 계산, 매 프레임 random 호출 제거
+        _init_speed = self.fly_speed * random.uniform(0.55, 0.80)
+        self._patrol_velocity = Vector2(1.0, 0.0).rotate(self._patrol_heading) * _init_speed
 
     def fly(self):
         self.is_flying = True
@@ -105,7 +108,10 @@ class BaldEagle(Carnivore):
             self.land()
             self.interaction_target = prey
             if self.distance_to(prey) <= self.radius + prey.radius + 8:
+                was_alive = prey.alive
                 self.attack(prey, world)
+                if was_alive and not prey.alive:
+                    self.claim_hunted_carcass(world, prey)
                 self.stop()
             else:
                 self.move_toward(prey.position, self.fly_speed + self.acceleration)
@@ -114,7 +120,13 @@ class BaldEagle(Carnivore):
             return
 
         # 먹이가 죽었으면 생긴 사체를 찾아 먹는다
-        carcass = world.nearest_carcass(self.position, self.food_range)
+        if self.hunted_carcass is None:
+            self.claim_hunted_carcass(world, prey)
+        if self.feed_hunted_carcass(world):
+            if self.hunted_carcass is None:
+                self.hunt_target = None
+            return
+        carcass = self.nearest_available_carcass(world, self.food_range)
         if carcass is None:
             self.hunt_target = None
             return
@@ -142,6 +154,8 @@ class BaldEagle(Carnivore):
             self.fly()
             self.move_away_from(elephant.position, self.fly_speed)
             return True
+        if self.feed_hunted_carcass(world):
+            return True
         # 2순위: 빈사 동물 사냥
         target = self.hunt_target or self.find_weak_target(world)
         if target is not None:
@@ -149,7 +163,7 @@ class BaldEagle(Carnivore):
             return True
         # 3순위: 배고프면 지평선 근처 사체로
         if self.hunger > 40.0:
-            carcass = world.nearest_carcass(self.position, self.food_range)
+            carcass = self.nearest_available_carcass(world, self.food_range)
             if carcass is not None and carcass.position.y <= HORIZON_ZONE:
                 if self.distance_to(carcass) <= self.radius + carcass.radius + 8:
                     self.land()
@@ -165,8 +179,11 @@ class BaldEagle(Carnivore):
         if self._patrol_timer <= 0.0:
             self._patrol_heading += random.uniform(-90.0, 90.0)
             self._patrol_timer = random.uniform(1.5, 4.0)
+            # 방향 전환 시에만 속도 벡터를 새로 계산 — 매 프레임 random 호출을 제거해
+            # 속도가 프레임마다 들쭉날쭉하지 않고 일정하게 유지된다(애니메이션 안정성 ↑)
+            new_speed = self.fly_speed * random.uniform(0.55, 0.80)
+            self._patrol_velocity = Vector2(1.0, 0.0).rotate(self._patrol_heading) * new_speed
         self.fly()
-        direction = Vector2(1.0, 0.0).rotate(self._patrol_heading)
-        self.desired_velocity = direction * self.fly_speed * random.uniform(0.55, 0.80)
+        self.desired_velocity = self._patrol_velocity
         self.action_text = "fly"
         return True

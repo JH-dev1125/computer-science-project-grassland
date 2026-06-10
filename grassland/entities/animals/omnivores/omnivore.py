@@ -17,7 +17,6 @@ class Omnivore(Animal):
         self.diet_type = "omnivore"
         self.diet_preference = 0.5   # 1에 가까울수록 육식 선호
         self.aggression = 0.4        # 위협 시 도망 대신 맞설 확률
-        self.forage_range = detect_range
 
     def update(self, world, dt):
         if not self.alive:
@@ -36,7 +35,7 @@ class Omnivore(Animal):
             return True
         if self.seek_water_if_needed(world):
             return True
-        if self.hunger > 58.0:
+        if self.hunger > 40.0:
             food = self.decide_food(world)
             if food is not None:
                 if self.distance_to(food) <= self.radius + food.radius + 8:
@@ -46,6 +45,8 @@ class Omnivore(Animal):
                     self.move_toward(food.position, self.speed * 0.75)
                     self.action_text = "forage"
                 return True
+            if self.hunger >= self.HUNGER_SEARCH_LEVEL:
+                return self.search_for_food(world, "search_food")
         return False
 
     def eat(self, food):
@@ -69,6 +70,7 @@ class Omnivore(Animal):
         return carcass if random.random() < self.diet_preference else plant
 
     def forage(self, world):
+        """먹이 감지 범위 안에 없으면 범위를 늘리지 않고 이동 탐색한다."""
         return self.decide_food(world)
 
     def flee_or_fight(self, threat, world, dt):

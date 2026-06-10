@@ -22,7 +22,7 @@ from pygame.math import Vector2
 class PhysicsEngine:
     SEP_RANGE = 2.1     # (두 반지름 합) × 이 배율 안의 이웃을 밀어낸다(클수록 더 흩어짐)
     AVOID_PAD = 28.0    # 구조물에서 이만큼 더 앞서 피하기 시작
-    EDGE_PAD = 40.0     # 맵 가장자리에서 이만큼 안쪽부터 안으로 조향
+    EDGE_PAD = 65.0     # 맵 가장자리에서 이만큼 안쪽부터 안으로 조향
 
     def __init__(self, width: float, height: float) -> None:
         self.width = width
@@ -61,12 +61,15 @@ class PhysicsEngine:
         target = Vector2(a.desired_velocity)
         target += self._sep(a, animals) * sp
         target += self._avoid(a, obstacles) * sp * 1.4
-        target += self._edges(a) * sp * 1.6   # 가장자리에선 강하게 안쪽으로 틀어 벽을 응시·정체하지 않게
-        # 기력이 낮을수록 최고 속도를 깎는다(탈진 0 → 0.5배, 만땅 100 → 1.0배) = 지쳐서 느려짐
+        # 기력과 허기가 최고 속도에 함께 반영된다.
         fatigue = 0.5 + 0.5 * (getattr(a, "stamina", 100.0) / 100.0)
-        cap = max(sp, a.desired_velocity.length()) * fatigue
+        hunger = a.hunger_speed_factor() if hasattr(a, "hunger_speed_factor") else 1.0
+        cap = max(sp, a.desired_velocity.length()) * fatigue * hunger
         if target.length() > cap:
             target.scale_to_length(cap)
+        # 가장자리 힘은 speed cap 바깥에서 더해야 desired_velocity 에 묻히지 않고 확실히 작동한다.
+        # cap 안에 넣으면 desired_velocity 와 합산 후 같은 크기로 잘려 벽 회피력이 사실상 0이 된다.
+        target += self._edges(a) * sp * 2.2
         return target
 
     @staticmethod
@@ -107,7 +110,7 @@ class PhysicsEngine:
             force.y -= 1.0 - (self.height - a.position.y) / m
         return force
 
-    # ── 잔여 겹침 해결: 위치만 부드럽게 분리(속도 보존) ─────────────────
+    # ── 잔여 겹침 해결: 위치 분리 + 겹치는 방향 속도 성분 감쇠 ─────────
     def _separate(self, animals, obstacles) -> None:
         for _ in range(2):
             for i, a in enumerate(animals):
@@ -120,9 +123,16 @@ class PhysicsEngine:
                     dist = d.length()
                     overlap = a.radius + b.radius - dist
                     if dist > 1e-6 and overlap > 0:
-                        shift = d / dist * (overlap * 0.5)
-                        a.position -= shift
-                        b.position += shift
+                        push = d / dist
+                        a.position -= push * (overlap * 0.5)
+                        b.position += push * (overlap * 0.5)
+                        # 서로를 향해 접근 중인 속도 성분을 흡수해 다음 프레임에 다시 겹치는 진동을 막는다.
+                        v_rel = b.velocity - a.velocity
+                        v_along = v_rel.dot(push)
+                        if v_along < 0:
+                            impulse = push * (v_along * 0.5)
+                            a.velocity += impulse
+                            b.velocity -= impulse
                 for pos, br in obstacles:    # 구조물은 통과 불가 — 밖으로 밀고 파고드는 속도만 제거
                     d = a.position - pos
                     dist = d.length()
