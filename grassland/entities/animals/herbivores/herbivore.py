@@ -22,7 +22,6 @@ class Herbivore(Animal):
         super().__init__(name, position, color, health, speed, power, detect_range)
         self.role = "herbivore"
         self.diet_type = "herbivore"
-        self.flee_speed = speed * 1.25
         self.panic_range = detect_range
         self.base_panic_range = detect_range
         self.is_chased = False
@@ -45,10 +44,8 @@ class Herbivore(Animal):
         if self.panic_boost_timer > 0:
             self.panic_boost_timer = max(0.0, self.panic_boost_timer - dt)
             self.panic_range = self.base_panic_range * 2.0
-            self.stamina_recovery_rate = 3.5
         else:
             self.panic_range = self.base_panic_range
-            self.stamina_recovery_rate = 7.0
         if self.reproduce_cooldown > 0:
             self.reproduce_cooldown = max(0.0, self.reproduce_cooldown - dt)
         if not self.is_chased and self.hunger < 40.0:
@@ -119,16 +116,19 @@ class Herbivore(Animal):
         stress_penalty = self.stress * 0.020   # 최대 2.0 감소(스트레스 100)
         self.health = min(self.max_health, self.health + max(0.5, 4.0 - stress_penalty) * dt)
 
+    @property
+    def flee_speed(self):
+        return self.speed * 1.25
+
     def fight_or_flight(
         self, threat: Animal, world: Optional["World"], dt: float
     ) -> None:
         health_ratio = self.health / self.max_health if self.max_health > 0 else 0.0
         if health_ratio > 0.7 and self.stamina > 60.0 and world is not None:
             self.attack(threat, world)
-            self.lose_energy(10.0 * dt)
-            self.action_text = "fight"
+            self.lose_energy(7.0 * dt)
         else:
             # 도주 속도에 luck 배율 적용 — 운이 좋은 순간엔 탈출, 나쁘면 따라잡힌다
+            # evade() 내부에서 -5/s 소모
             self.evade(threat.position, self.flee_speed * self._escape_luck, dt)
-            self.lose_energy(8.0 * dt)
 

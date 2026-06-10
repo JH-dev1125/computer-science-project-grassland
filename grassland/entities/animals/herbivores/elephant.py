@@ -51,21 +51,26 @@ class Elephant(Herbivore):
             return True
         if self.seek_water_if_needed(world):
             return True
-        # 코끼리는 나무 잎을 즐겨 뜯어 먹는다(탐지범위 안 잎 무성한 나무로)
-        if self.hunger > 40.0:
-            tree = world.nearest_tree(self.position, self.detect_range, need_foliage=True)
-            if tree is not None:
-                self.interaction_target = tree
-                if self.distance_to(tree) <= self.radius + tree.radius + 12:
-                    if self._feed_ready():
-                        eaten = tree.eat_leaves(10.0)
-                        self.hunger = max(0.0, self.hunger - eaten)
-                    self.stop()
-                else:
-                    self.move_toward(tree.position, self.speed * 0.7)
-                self.action_text = "browse"
-                return True
         return self.search_food(world, dt)
+
+    def search_food(self, world, dt):
+        if self.hunger < 40.0:
+            return False
+        # 나무 잎을 먼저 탐색, 없으면 Herbivore 일반 식물 탐색
+        tree = world.nearest_tree(self.position, self.detect_range, need_foliage=True)
+        if tree is not None:
+            self.interaction_target = tree
+            if self.distance_to(tree) <= self.radius + tree.radius + 12:
+                if self._feed_ready():
+                    eaten = tree.eat_leaves(10.0)
+                    self.hunger = max(0.0, self.hunger - eaten)
+                self.stop()
+                self.action_text = "eat"
+            else:
+                self.move_toward(tree.position, self.speed * 0.7)
+                self.action_text = "search_food"
+            return True
+        return super().search_food(world, dt)
 
     @property
     def health(self):
@@ -86,28 +91,23 @@ class Elephant(Herbivore):
     ) -> None:
         if world is None:
             return
-        # stomp 이미지 홀드 타이머 감소
         self._stomp_hold = max(0.0, self._stomp_hold - dt)
-        if self.stamina < 30.0:
-            # 기력 부족 — stomp 불가, 맞아도 50% 감소
-            self.stop()
-            self.action_text = "tired"
-            return
-        # 홀드 중이면 stomp 이미지를 유지하되 실제 행동은 계속(중복 에너지 소모 없이)
+        # 홀드 중이면 stomp 이미지 유지 (중복 에너지 소모 없음)
         if self._stomp_hold > 0.0:
             self.action_text = "stomp"
             if self.distance_to(threat) <= self.radius + threat.radius + 24:
-                self.attack(threat, world)   # 공격 쿨다운 관리만 — 에너지 추가 소모 없음
+                self.attack(threat, world)
             return
         if self.distance_to(threat) <= self.radius + threat.radius + 24:
             self.stomp(threat, world, dt)
         else:
             self.stop()
-            self.action_text = "guard"
 
     def stomp(self, target: Animal, world: "World", dt: float = 0.016) -> None:
         """가까운 포식자를 공격하고 넉백+공중 바운스로 쫓아낸다."""
-        # dt 기반 에너지 소모 — 매 프레임 호출돼도 초당 35 소모로 일정하게 유지
+        if self.stamina < 30.0:
+            self.stop()
+            return
         self.lose_energy(35.0 * dt)
         # stomp 이미지를 0.5초간 유지(이미지가 한 프레임에 사라지지 않도록)
         self._stomp_hold = 0.5

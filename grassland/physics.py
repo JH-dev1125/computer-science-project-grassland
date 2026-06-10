@@ -61,10 +61,9 @@ class PhysicsEngine:
         target = Vector2(a.desired_velocity)
         target += self._sep(a, animals) * sp
         target += self._avoid(a, obstacles) * sp * 1.4
-        # 기력과 허기가 최고 속도에 함께 반영된다.
-        fatigue = 0.5 + 0.5 * (getattr(a, "stamina", 100.0) / 100.0)
+        # 허기가 최고 속도에 반영된다. 스태미나 효과는 speed 프로퍼티에서 처리.
         hunger = a.hunger_speed_factor() if hasattr(a, "hunger_speed_factor") else 1.0
-        cap = max(sp, a.desired_velocity.length()) * fatigue * hunger
+        cap = max(sp, a.desired_velocity.length()) * hunger
         if target.length() > cap:
             target.scale_to_length(cap)
         # 가장자리 힘은 speed cap 바깥에서 더해야 desired_velocity 에 묻히지 않고 확실히 작동한다.

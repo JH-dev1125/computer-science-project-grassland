@@ -43,6 +43,7 @@ class BaldEagle(Carnivore):
         self._altitude_timer = random.uniform(1.5, 4.0)
         # ── 빈사 상태 동물 사냥 ─────────────────────────────────────────
         self.hunt_target = None
+        self.hunt_stamina_cost = 5.0
         # ── 순찰 비행 (가만히 있지 않도록) ──────────────────────────────
         self._patrol_heading = random.uniform(0.0, 360.0)
         self._patrol_timer = random.uniform(1.0, 3.0)
@@ -94,11 +95,13 @@ class BaldEagle(Carnivore):
     def hunt(self, prey, world, dt):
         """Carnivore.hunt() 확장 — 빈사 동물 추적·급강하·사체 섭취까지 일괄 처리.
         이동 속도는 fly_speed + acceleration 으로 부모의 acceleration 메커니즘을 사용."""
+        if self.hunt_target is not prey:   # 새 먹이 → 급강하 시작 비용
+            self.lose_energy(35.0)
         self.hunt_target = prey
 
         if prey.alive:
             if self.stamina <= 8.0:
-                self.rest()
+                self.rest(dt)
                 return
             self.land()
             self.interaction_target = prey

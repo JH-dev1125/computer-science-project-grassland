@@ -63,7 +63,7 @@ class Omnivore(Animal):
                 self.interaction_target = prey
                 if self.distance_to(prey) <= self.radius + prey.radius + 8:
                     self.attack(prey, world)
-                    self.lose_energy(8.0 * dt)
+                    self.lose_energy(7.0 * dt)
                 else:
                     self.move_toward(prey.position, self.speed)
                     self.action_text = "hunt"
@@ -91,6 +91,6 @@ class Omnivore(Animal):
         # aggression 확률 + 근거리일 때만 공격, 나머지는 도망
         if random.random() < self.aggression and self.distance_to(threat) < 42:
             self.attack(threat, world)
-            self.action_text = "fight"
+            self.lose_energy(7.0 * dt)
         else:
-            self.evade(threat.position, self.speed * 1.15, dt)  # 속도 115%로 도주
+            self.evade(threat.position, self.speed * 1.15, dt)  # 속도 115%로 도주 (evade -5/s)

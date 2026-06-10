@@ -1,7 +1,7 @@
 # =============================================================================
 # warthog.py — 혹멧돼지 (계획서 Warthog, Omnivore 상속)
-# 고유 속성: tusk_power(엄니 위력), burrow_location(도주할 굴 위치)
-# 고유 메서드: dig()(땅 파 먹이 찾기), burrow()(굴로 도주), yacha()(굴 근처면 맞섬)
+# 고유 속성: burrow_location(도주할 굴 위치)
+# 고유 메서드: burrow()(굴로 도주), _engage()(접근·반격)
 # =============================================================================
 from grassland.entities.animals.omnivores.omnivore import Omnivore
 
@@ -16,42 +16,29 @@ class Warthog(Omnivore):
         self.food_range = 85.0          # 식물·사체 탐지 거리 (detect_range=115보다 좁음)
         self.diet_preference = 0.35     # 초식 약간 선호
         self.aggression = 0.35          # 중간 정도의 맞섬 성향
-        self.tusk_power = 11.0          # 야차 발동 시 사용하는 엄니 공격력 (포식자 즉사 방지용)
         self.burrow_location = None     # 마지막으로 확인한 굴 위치
-
-    def dig(self, world):
-        # 땅을 파는 행동: 탐지 거리 안의 가장 가까운 식물을 먹이로 반환
-        self.action_text = "dig"
-        return world.nearest_plant(self.position, self.food_range)
 
     def burrow(self, world):
         # 가까운 동굴로 도주; 동굴이 없으면 현재 위치를 굴로 삼아 멈춤
+        if self.action_text != "burrow":   # 새 도주 시작 시 1회성 비용
+            self.lose_energy(20.0)
         cave = world.nearest_terrain_type("Cave", self.position)
         if cave is not None:
             self.burrow_location = cave.position.copy()
-            self.move_toward(cave.position, self.speed * 1.15)  # 속도 115%로 도주
+            self.move_toward(cave.position, self.speed * 1.15)
             if cave.contains(self):
-                self.stop()   # 동굴 안에 들어오면 정지
+                self.stop()
         else:
-            # 동굴 없음 → 현재 위치에서 굴을 팠다고 간주하고 멈춤
             self.burrow_location = self.position.copy()
             self.stop()
         self.action_text = "burrow"
 
-    def yacha(self, threat, world):
-        # 굴 근처에서 포식자에게 엄니로 반격 (계획서 Yacha)
-        # 공격 시에만 tusk_power로 교체하고 공격 후 원래 power로 복원
-        old_power, self.power = self.power, self.tusk_power
-        self.attack(threat, world)
-        self.power = old_power
-        self.action_text = "yacha"
-
     def _engage(self, target, world, dt):
-        """대상으로 접근해, 사정권에 들면 엄니로 공격(yacha)."""
+        """대상으로 접근해, 사정권에 들면 공격."""
         self.interaction_target = target
         if self.distance_to(target) <= self.radius + target.radius + 8:
-            self.yacha(target, world)
-            self.lose_energy(8.0 * dt)
+            self.attack(target, world)
+            self.lose_energy(7.0 * dt)
         else:
             self.move_toward(target.position, self.speed)
             self.action_text = "hunt"
@@ -70,13 +57,12 @@ class Warthog(Omnivore):
             cave = world.nearest_terrain_type("Cave", self.position)
             near_cave = cave is not None and self.distance_to(cave) < 160.0
             if near_cave and self.distance_to(threat) < 48.0 and self.stamina > 18.0:
-                # 굴 근처 + 포식자 근접 + 기력 충분 → 엄니로 맞섬
-                self.yacha(threat, world)
-                self.lose_energy(10.0 * dt)
+                # 굴 근처 + 포식자 근접 + 기력 충분 → 반격
+                self.attack(threat, world)
+                self.lose_energy(7.0 * dt)
             else:
-                # 그 외 → 굴로 도주
+                # 그 외 → 굴로 도주 (burrow() 내부에서 1회성 비용 처리)
                 self.burrow(world)
-                self.lose_energy(6.0 * dt)
             return True
 
         # 갈증 우선 처리

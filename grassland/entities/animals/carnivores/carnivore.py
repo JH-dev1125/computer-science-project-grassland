@@ -15,7 +15,7 @@ class Carnivore(Animal):
         self.diet_type = "carnivore"
         self.stealth = 0.18              # 피식자 panic_range 를 줄이는 은신율
         self.acceleration = 34.0         # 추격 순간 속도 증가량
-        self.hunt_stamina_cost = 10.0    # 추격 1틱당 스태미나 소모
+        self.hunt_stamina_cost = 8.0     # 추격 1틱당 스태미나 소모
         self._finished_carcasses = set()  # eat 시도 시 50% 미만이면 영구 블랙리스트
 
     def update(self, world, dt):
@@ -111,7 +111,7 @@ class Carnivore(Animal):
 
     def hunt(self, prey, world, dt):
         if self.stamina <= 8.0:               # 지치면 추격 포기·휴식
-            self.rest()
+            self.rest(dt)
             return
         self.interaction_target = prey
         if self.distance_to(prey) <= self.radius + prey.radius + 8:
@@ -120,13 +120,14 @@ class Carnivore(Animal):
             if was_alive and not prey.alive:
                 self.stop()
                 self.action_text = "eat"
+            self.lose_energy(7.0 * dt)
         else:
             # 예측 추격(lead pursuit): 먹이의 '갈 곳'을 노려 다양한 각도로 파고든다.
             # 먹이가 지그재그로 꺾으면 예측이 빗나가 포식자가 헛돈다(자연스러운 회피).
             lead = prey.position + prey.velocity * 0.35
             self.move_toward(lead, self.speed + self.acceleration)
             self.action_text = "hunt"
-        self.lose_energy(self.hunt_stamina_cost * dt)
+            self.lose_energy(self.hunt_stamina_cost * dt)
 
     def hide(self):
         """덤불에 숨는다. 스텔스 값을 높여 먹이가 더 가까이 올 때까지 못 알아채게 한다."""
@@ -134,10 +135,9 @@ class Carnivore(Animal):
         self.stealth = 0.4    # 매복 중 stealth 0.18 → 0.4 로 높아짐
         self.action_text = "hide"
 
-    def rest(self):
+    def rest(self, dt=0.016):
         self.stop()
-        self.recover_stamina(0.8)
-        self.action_text = "rest"
+        self.stamina = min(100.0, self.stamina + 10.0 * dt)
 
     def detect(self, target):
         """숨은 대상은 탐지 불가. 노출된 대상만 detect_range 안이면 탐지."""

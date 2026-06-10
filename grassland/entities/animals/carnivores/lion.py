@@ -11,7 +11,7 @@ class Lion(Carnivore):
                          health=120.0, speed=84.0, power=22.0, detect_range=170.0)
         self.thirst_limit = 70.0
         self.food_range = 130.0        # 사체 탐지 — 독점 방지(detect_range=170)
-        self.hunt_stamina_cost = 17.0
+        self.hunt_stamina_cost = 5.0
         self.acceleration = 48.0
         self.mane_size = 1.0
         self.mane_exist = True
@@ -64,6 +64,7 @@ class Lion(Carnivore):
 
     def roar(self, world):
         """포효: 일정 범위 내 Zebra 의 panic 을 유발(직접 안 보여도 경계↑)."""
+        self.lose_energy(35.0)
         for animal in world.living_animals():
             if animal.name == "Zebra" and self.distance_to(animal) <= 320.0:
                 if hasattr(animal, "panic_boost_timer"):
