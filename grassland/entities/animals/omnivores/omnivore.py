@@ -57,7 +57,20 @@ class Omnivore(Animal):
     def search_food(self, world, dt):
         threshold = 20.0 if self.stamina < 25.0 else 58.0
         if self.hunger < threshold:
+            self._committed_food = None
             return False
+        # committed target 유지 (먹잇감 공격은 random gate라 커밋하지 않음)
+        if self._food_valid(self._committed_food):
+            food = self._committed_food
+            self.interaction_target = food
+            if self.distance_to(food) <= self.radius + food.radius + 8:
+                self.eat(food)
+                self.stop()
+            else:
+                self.move_toward(food.position, self.speed * 0.75)
+                self.action_text = "search_food"
+            return True
+        self._committed_food = None
         if random.random() < self.aggression:
             prey = world.nearest_weak_or_prey(self, self.detect_range)
             if prey is not None:
@@ -79,6 +92,7 @@ class Omnivore(Animal):
             food = carcass
         else:
             food = carcass if random.random() < self.diet_preference else plant
+        self._committed_food = food
         self.interaction_target = food
         if self.distance_to(food) <= self.radius + food.radius + 8:
             self.eat(food)

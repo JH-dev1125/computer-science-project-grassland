@@ -94,11 +94,15 @@ class Herbivore(Animal):
     def search_food(self, world, dt):
         threshold = 20.0 if self.stamina < 25.0 else 40.0
         if self.hunger < threshold:
+            self._committed_food = None
             return False
-        reach = None if self.hunger > 92.0 else self.food_range
-        plant = world.nearest_plant(self.position, reach)
+        plant = self._committed_food if self._food_valid(self._committed_food) else None
         if plant is None:
-            return False
+            reach = None if self.hunger > 92.0 else self.food_range
+            plant = world.nearest_plant(self.position, reach)
+            if plant is None:
+                return False
+            self._committed_food = plant
         self.interaction_target = plant
         if self.distance_to(plant) <= self.radius + plant.radius + 8:
             self.eat(plant)
