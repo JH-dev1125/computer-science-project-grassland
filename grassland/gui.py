@@ -352,7 +352,7 @@ class GrasslandApp:
             return pygame.Rect(x - r, y - r, 2 * r, 2 * r)
         if flip:
             sprite = pygame.transform.flip(sprite, True, False)
-        if getattr(entity, "is_hidden", False):   # 숨으면 반투명하게
+        if getattr(entity, "is_hidden", False) or getattr(entity, "_in_bush", False):
             if not flip:
                 sprite = sprite.copy()
             sprite.set_alpha(130)
@@ -499,7 +499,16 @@ class GrasslandApp:
                         e._flip_cooldown = 0.4
                 altitude = getattr(e, "altitude", 0.0)
                 total_lift = self._lift(e)
-                self.draw_shadow(e, x, y, altitude)   # 모든 동물 발밑에 그림자(altitude 클수록 작고 옅게)
+                # 하이에나: 덤불 안에 있으면 반투명 (ambush 없이 시각 효과만)
+                if e.name == "Hyena":
+                    e._in_bush = any(
+                        p.alive and p.name == "Bush"
+                        and e.position.distance_to(p.position) < p.radius
+                        for p in self.world.plants
+                    )
+                else:
+                    e._in_bush = False
+                self.draw_shadow(e, x, y, altitude)
                 frame = self._frame(e, dt)
                 rect = self.blit_sprite(e, x, y - total_lift, flip=not getattr(e, "facing_left", True),
                                         anchor="bottom", sprite_name=frame)

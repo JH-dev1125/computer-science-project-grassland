@@ -60,7 +60,10 @@ class Lion(Carnivore):
                     self.move_toward(carcass.position, self.speed * 0.75)
                     self.action_text = "search_food"
                 return True
-        return self.ambush(world, dt)   # 먹이가 안 보이면 덤불에 숨어 기습 시도
+        # ambush는 사냥을 결심한 후(hunger > 55)에만 — 허기 낮을 때 남발 방지
+        if self.hunger > 55.0:
+            return self.ambush(world, dt)
+        return False
 
     def roar(self, world):
         """포효: 일정 범위 내 Zebra 의 panic 을 유발(직접 안 보여도 경계↑)."""
