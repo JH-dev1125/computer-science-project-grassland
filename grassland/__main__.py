@@ -1,5 +1,13 @@
-# python -m grassland 로 실행할 때의 진입점.
-from grassland.app import run
+# =============================================================================
+# __main__.py — 'python -m grassland' 로 실행할 때의 진입점
+# =============================================================================
+# [문법] 패키지 폴더(grassland/) 안에 __main__.py 가 있으면,
+#        'python -m grassland' 명령으로 패키지를 직접 실행할 수 있다.
+#        이때 파이썬은 이 __main__.py 를 찾아 실행한다.
+#        → main.py 와 똑같이 app.run() 만 불러, 실행 방법을 둘로 늘려 줄 뿐이다.
+#        (main.py / python -m grassland 두 경로 모두 같은 run() 으로 모인다)
+# =============================================================================
+from grassland.app import run  # [흐름 0] app.py 의 run 함수를 가져온다(=app.py 상단도 실행됨)
 
-if __name__ == "__main__":
-    run()
+if __name__ == "__main__":      # [문법] 직접 실행될 때만 아래 수행(main.py 설명과 동일)
+    run()                       # [호출→] grassland/app.py 의 run()
